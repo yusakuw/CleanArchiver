@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 45;
+	objectVersion = 51;
 	objects = {
 
 /* Begin PBXAggregateTarget section */
@@ -45,8 +45,6 @@
 
 /* Begin PBXBuildFile section */
 		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
-		B516A210109C850E0039610F /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B516A20F109C850E0039610F /* Sparkle.framework */; };
-		B516A240109C8CC60039610F /* Sparkle.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B516A20F109C850E0039610F /* Sparkle.framework */; };
 		B516A25E109C9E5E0039610F /* dsa_pub.pem in Resources */ = {isa = PBXBuildFile; fileRef = B516A25D109C9E5E0039610F /* dsa_pub.pem */; };
 		B536BA42109C2BB6003C7479 /* CleanArchiver_Prefix.pch in Headers */ = {isa = PBXBuildFile; fileRef = B536BA41109C2BB6003C7479 /* CleanArchiver_Prefix.pch */; };
 		B536BA51109C2D1C003C7479 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = B536BA50109C2D1C003C7479 /* main.m */; };
@@ -89,25 +87,19 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		B516A23F109C8CB70039610F /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				B516A240109C8CC60039610F /* Sparkle.framework in CopyFiles */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
 		1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
 		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		29B97325FDCFA39411CA2CEA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = /System/Library/Frameworks/Foundation.framework; sourceTree = "<absolute>"; };
+		5A7043782289A1E200B737F1 /* en */ = {isa = PBXFileReference; lastKnownFileType = folder; name = en; path = CleanArchiver/Localized/en.lproj/CleanArchiverHelp; sourceTree = "<group>"; };
+		5A7043792289A1E200B737F1 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		5A70437A2289A1E200B737F1 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		5A70437C2289A1E500B737F1 /* ja */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ja; path = CleanArchiver/Localized/ja.lproj/CleanArchiverHelp; sourceTree = "<group>"; };
+		5A70437D2289A1E600B737F1 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		5A70437E2289A1E600B737F1 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		5A70437F2289A1E600B737F1 /* ja */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = ja; path = ja.lproj/MainMenu.nib; sourceTree = "<group>"; };
+		5A7043802289A1EA00B737F1 /* Base */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = Base; path = Base.lproj/MainMenu.nib; sourceTree = "<group>"; };
 		8D1107320486CEB800E47090 /* CleanArchiver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CleanArchiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B516A20F109C850E0039610F /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Sparkle.framework; sourceTree = "<group>"; };
 		B516A25D109C9E5E0039610F /* dsa_pub.pem */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = dsa_pub.pem; path = CleanArchiver/dsa_pub.pem; sourceTree = "<group>"; };
 		B536BA15109C1ED1003C7479 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = CleanArchiver/Info.plist; sourceTree = "<group>"; };
 		B536BA41109C2BB6003C7479 /* CleanArchiver_Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CleanArchiver_Prefix.pch; path = CleanArchiver/CleanArchiver_Prefix.pch; sourceTree = "<group>"; };
@@ -122,19 +114,11 @@
 		B536BA91109C2EBB003C7479 /* mkdmg */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; name = mkdmg; path = CleanArchiver/mkdmg; sourceTree = "<group>"; };
 		B536BA9B109C2F5A003C7479 /* README.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = README.txt; path = CleanArchiver/README.txt; sourceTree = "<group>"; };
 		B536BA9C109C2F5A003C7479 /* version.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = version.plist; path = CleanArchiver/version.plist; sourceTree = "<group>"; };
-		B545ACAD109C342C009CDDE0 /* Japanese */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Japanese; path = CleanArchiver/Localized/Japanese.lproj/CleanArchiverHelp; sourceTree = "<group>"; };
-		B545ACBE109C34C5009CDDE0 /* English */ = {isa = PBXFileReference; lastKnownFileType = folder; name = English; path = CleanArchiver/Localized/English.lproj/CleanArchiverHelp; sourceTree = "<group>"; };
 		B553E41F109DC60C009DDDA0 /* Carc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Carc.h; path = CleanArchiver/Carc.h; sourceTree = "<group>"; };
 		B553E420109DC60C009DDDA0 /* Carc.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Carc.m; path = CleanArchiver/Carc.m; sourceTree = "<group>"; };
 		B56CCAE2109D680A00993EE9 /* carc */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.ruby; name = carc; path = CleanArchiver/carc; sourceTree = "<group>"; };
 		B58986DE10B19AD900C67219 /* License-p7zip.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = "License-p7zip.txt"; path = "p7zip/License-p7zip.txt"; sourceTree = "<group>"; };
 		B58986E210B19AED00C67219 /* License-zip.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = "License-zip.txt"; path = "zip/License-zip.txt"; sourceTree = "<group>"; };
-		B5F43A9D109C3298000150B6 /* English */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		B5F43A9F109C3298000150B6 /* English */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/Localizable.strings; sourceTree = "<group>"; };
-		B5F43AA1109C3298000150B6 /* English */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = English; path = English.lproj/MainMenu.nib; sourceTree = "<group>"; };
-		B5F43AC3109C3298000150B6 /* Japanese */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = Japanese; path = Japanese.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		B5F43AC4109C3298000150B6 /* Japanese */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = Japanese; path = Japanese.lproj/Localizable.strings; sourceTree = "<group>"; };
-		B5F43AC5109C3298000150B6 /* Japanese */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = Japanese; path = Japanese.lproj/MainMenu.nib; sourceTree = "<group>"; };
 		B5FE4A12109E928D00E1608F /* 7za */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; name = 7za; path = p7zip/bin/7za; sourceTree = "<group>"; };
 		B5FE4B3C109FD2DB00E1608F /* zip */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; name = zip; path = zip/zip; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -145,7 +129,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */,
-				B516A210109C850E0039610F /* Sparkle.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,7 +152,6 @@
 			isa = PBXGroup;
 			children = (
 				1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */,
-				B516A20F109C850E0039610F /* Sparkle.framework */,
 			);
 			name = "Linked Frameworks";
 			sourceTree = "<group>";
@@ -271,7 +253,6 @@
 				8D11072C0486CEB800E47090 /* Sources */,
 				8D11072E0486CEB800E47090 /* Frameworks */,
 				B58DD5B607BF466600A6D878 /* AppleScript */,
-				B516A23F109C8CB70039610F /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -290,9 +271,18 @@
 /* Begin PBXProject section */
 		29B97313FDCFA39411CA2CEA /* Project object */ = {
 			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1020;
+			};
 			buildConfigurationList = B5EA5CE808F15FD40064B72D /* Build configuration list for PBXProject "CleanArchiver" */;
-			compatibilityVersion = "Xcode 3.1";
+			compatibilityVersion = "Xcode 10.0";
+			developmentRegion = en;
 			hasScannedForEncodings = 1;
+			knownRegions = (
+				en,
+				ja,
+				Base,
+			);
 			mainGroup = 29B97314FDCFA39411CA2CEA /* CleanArchiver */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -389,8 +379,8 @@
 		B545ACAC109C342C009CDDE0 /* CleanArchiverHelp */ = {
 			isa = PBXVariantGroup;
 			children = (
-				B545ACBE109C34C5009CDDE0 /* English */,
-				B545ACAD109C342C009CDDE0 /* Japanese */,
+				5A7043782289A1E200B737F1 /* en */,
+				5A70437C2289A1E500B737F1 /* ja */,
 			);
 			name = CleanArchiverHelp;
 			sourceTree = "<group>";
@@ -398,8 +388,8 @@
 		B5F43A9C109C3298000150B6 /* InfoPlist.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
-				B5F43A9D109C3298000150B6 /* English */,
-				B5F43AC3109C3298000150B6 /* Japanese */,
+				5A7043792289A1E200B737F1 /* en */,
+				5A70437D2289A1E600B737F1 /* ja */,
 			);
 			name = InfoPlist.strings;
 			path = CleanArchiver/Localized;
@@ -408,8 +398,8 @@
 		B5F43A9E109C3298000150B6 /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
-				B5F43A9F109C3298000150B6 /* English */,
-				B5F43AC4109C3298000150B6 /* Japanese */,
+				5A70437A2289A1E200B737F1 /* en */,
+				5A70437E2289A1E600B737F1 /* ja */,
 			);
 			name = Localizable.strings;
 			path = CleanArchiver/Localized;
@@ -418,8 +408,8 @@
 		B5F43AA0109C3298000150B6 /* MainMenu.nib */ = {
 			isa = PBXVariantGroup;
 			children = (
-				B5F43AA1109C3298000150B6 /* English */,
-				B5F43AC5109C3298000150B6 /* Japanese */,
+				5A70437F2289A1E600B737F1 /* ja */,
+				5A7043802289A1EA00B737F1 /* Base */,
 			);
 			name = MainMenu.nib;
 			path = CleanArchiver/Localized;
@@ -431,6 +421,7 @@
 		B535A1F0097A4F430018C1F1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = YES;
 				CURRENT_PROJECT_VERSION = 39;
 				DYLIB_COMPATIBILITY_VERSION = "";
@@ -440,7 +431,6 @@
 					"$(FRAMEWORK_SEARCH_PATHS_QUOTED_FOR_TARGET_1)",
 				);
 				FRAMEWORK_SEARCH_PATHS_QUOTED_FOR_TARGET_1 = "\"$(SRCROOT)\"";
-				GCC_ENABLE_FIX_AND_CONTINUE = NO;
 				GCC_ENABLE_TRIGRAPHS = NO;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
 				GCC_MODEL_PPC64 = NO;
@@ -455,6 +445,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = jp.sopht.CleanArchiver;
 				PRODUCT_NAME = CleanArchiver;
 				SECTORDER_FLAGS = "";
 				VERSIONING_SYSTEM = "apple-generic";
@@ -467,18 +458,39 @@
 		B535A1F1097A4F430018C1F1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.4;
-				PREBINDING = NO;
-				SDKROOT = macosx10.5;
 			};
 			name = Release;
 		};
 		B5EA5CE508F15FD40064B72D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 39;
 				DYLIB_COMPATIBILITY_VERSION = "";
@@ -489,7 +501,6 @@
 				);
 				FRAMEWORK_SEARCH_PATHS_QUOTED_FOR_TARGET_1 = "\"$(SRCROOT)\"";
 				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_ENABLE_FIX_AND_CONTINUE = YES;
 				GCC_ENABLE_TRIGRAPHS = NO;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
 				GCC_MODEL_PPC64 = NO;
@@ -505,6 +516,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = jp.sopht.CleanArchiver;
 				PRODUCT_NAME = CleanArchiver;
 				SECTORDER_FLAGS = "";
 				VERSIONING_SYSTEM = "apple-generic";
@@ -517,18 +529,41 @@
 		B5EA5CE908F15FD40064B72D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.4;
-				PREBINDING = NO;
-				SDKROOT = macosx10.5;
+				ONLY_ACTIVE_ARCH = YES;
 			};
 			name = Debug;
 		};
 		B5FE4AF9109FBBC700E1608F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -539,9 +574,9 @@
 		B5FE4AFA109FBBC700E1608F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				GCC_ENABLE_FIX_AND_CONTINUE = NO;
 				PRODUCT_NAME = zip;
 				ZERO_LINK = NO;
 			};
@@ -550,6 +585,7 @@
 		B5FE4B65109FD88600E1608F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -560,9 +596,9 @@
 		B5FE4B66109FD88600E1608F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				GCC_ENABLE_FIX_AND_CONTINUE = NO;
 				PRODUCT_NAME = p7zip;
 				ZERO_LINK = NO;
 			};
