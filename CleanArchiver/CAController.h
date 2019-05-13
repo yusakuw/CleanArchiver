@@ -27,6 +27,7 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "Carc.h"
 
 // Preference identifiers
 extern NSString *AOArchiveIndividually;
@@ -37,7 +38,7 @@ extern NSString *AOExcludeDSS;
 extern NSString *AOInternetEnabledDMG;
 extern NSString *AOReplaceAutomatically;
 
-enum archiveTypeMenuIndex {
+typedef NS_ENUM(NSInteger, archiveTypeMenuIndex) {
     DMGT = 0,
     SZIPT,
     BZIP2T,
@@ -68,7 +69,7 @@ enum compressionLevelMenuIndex {
     IBOutlet NSWindow *_progressWindow;
 
     NSMutableArray *_operationQueue;
-    id _mainTask;
+    Carc *_mainTask;
     int _terminateAfterArchiving;
     BOOL _archiveSessionInProgress;
     BOOL _archivingCancelled;

@@ -83,7 +83,7 @@
 
 - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
 {
-    unsigned mask, ret;
+    NSDragOperation mask, ret;
 
     mask = [sender draggingSourceOperationMask];
     ret = (NSDragOperationGeneric & mask);
