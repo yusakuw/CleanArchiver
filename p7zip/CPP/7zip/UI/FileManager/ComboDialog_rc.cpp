@@ -15,6 +15,8 @@
     #include "wx/wx.h"
 #endif  
 
+#undef _WIN32
+ 
 #include "Windows/Control/DialogImpl.h"
 
 #include "ComboDialogRes.h"
@@ -28,11 +30,11 @@ class ComboDialogImpl : public NWindows::NControl::CModalDialogImpl
 	wxBoxSizer* topsizer = new wxBoxSizer(wxVERTICAL);
 
 
-	topsizer->Add(new wxStaticText(this, IDC_COMBO_STATIC, _T("")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
+	topsizer->Add(new wxStaticText(this, IDT_COMBO, _T("")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
 
 
 	wxArrayString pathArray;
-	wxComboBox *combo = new wxComboBox(this, IDC_COMBO_COMBO, wxEmptyString, wxDefaultPosition, wxSize(200,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
+	wxComboBox *combo = new wxComboBox(this, IDC_COMBO, wxEmptyString, wxDefaultPosition, wxSize(200,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
 
 	topsizer->Add(combo, 0 ,wxALL | wxALIGN_LEFT, 5 );
 
@@ -48,10 +50,11 @@ private:
 	DECLARE_EVENT_TABLE()
 };
 
-REGISTER_DIALOG(IDD_DIALOG_COMBO,ComboDialog,0)
+REGISTER_DIALOG(IDD_COMBO,ComboDialog,0)
 
 BEGIN_EVENT_TABLE(ComboDialogImpl, wxDialog)
 	EVT_BUTTON(wxID_ANY,   CModalDialogImpl::OnAnyButton)
 	EVT_CHECKBOX(wxID_ANY, CModalDialogImpl::OnAnyButton)
+	EVT_MENU(WORKER_EVENT, CModalDialogImpl::OnWorkerEvent)
 END_EVENT_TABLE()
 

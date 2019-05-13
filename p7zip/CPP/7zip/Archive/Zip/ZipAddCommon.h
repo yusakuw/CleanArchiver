@@ -26,6 +26,7 @@ struct CCompressingResult
   UInt32 CRC;
   UInt16 Method;
   Byte ExtractVersion;
+  bool FileTimeWasUsed;
 };
 
 class CAddCommon
@@ -35,6 +36,7 @@ class CAddCommon
   CMyComPtr<ICompressCoder> _copyCoder;
 
   CMyComPtr<ICompressCoder> _compressEncoder;
+  Byte _compressExtractVersion;
 
   CFilterCoder *_cryptoStreamSpec;
   CMyComPtr<ISequentialOutStream> _cryptoStream;
@@ -42,15 +44,16 @@ class CAddCommon
   NCrypto::NZip::CEncoder *_filterSpec;
   NCrypto::NWzAes::CEncoder *_filterAesSpec;
 
-  CMyComPtr<ICompressFilter> _zipCryptoFilter;
-  CMyComPtr<ICompressFilter> _aesFilter;
-
-
+  Byte *_buf;
+  
+  HRESULT CalcStreamCRC(ISequentialInStream *inStream, UInt32 &resultCRC);
 public:
   CAddCommon(const CCompressionMethodMode &options);
+  ~CAddCommon();
   HRESULT Compress(
       DECL_EXTERNAL_CODECS_LOC_VARS
       ISequentialInStream *inStream, IOutStream *outStream,
+      UInt32 fileTime,
       ICompressProgressInfo *progress, CCompressingResult &operationResult);
 };
 

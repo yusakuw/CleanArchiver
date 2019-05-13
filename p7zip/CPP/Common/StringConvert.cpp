@@ -1,7 +1,6 @@
 // Common/StringConvert.cpp
 
 #include "StdAfx.h"
-#include <stdlib.h>
 
 #include "StringConvert.h"
 extern "C"
@@ -9,73 +8,45 @@ extern "C"
 int global_use_utf16_conversion = 0;
 }
 
-namespace utf8
-{
-#include "UTFConvert.cpp"
-}
-
-
 #ifdef LOCALE_IS_UTF8
 
-#ifdef ENV_MACOSX
-namespace mac
-{
-#include <CoreFoundation/CFString.h>
-}
-#endif
+#ifdef __APPLE_CC__
+#define UInt32  macUIn32
+#include <CoreFoundation/CoreFoundation.h>
+#undef UInt32
 
 UString MultiByteToUnicodeString(const AString &srcString, UINT codePage)
 {
-  if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
+  if (!srcString.IsEmpty())
   {
-#ifdef ENV_MACOSX
     UString resultString;
-    mac::CFStringRef string;
-    mac::CFMutableStringRef mutableString;
-    mac::UniChar *utf16String;
-    int len;
-    const char *src = srcString;
+    const char * path = &srcString[0];
 
-    string = mac::CFStringCreateWithBytes(NULL, (const mac::UInt8 *)src,
-					  strlen(src),
-					  mac::kCFStringEncodingUTF8, false);
-    if (string == NULL)
-      goto fail1;
-    mutableString = mac::CFStringCreateMutableCopy(NULL, 0, string);
-    if (mutableString == NULL)
-      goto fail2;
+// FIXME    size_t n = strlen(path);
 
-    mac::CFStringNormalize(mutableString, mac::kCFStringNormalizationFormC);
-    len = mac::CFStringGetLength(mutableString);
+    CFStringRef cfpath = CFStringCreateWithCString(NULL,path,kCFStringEncodingUTF8);
 
-    utf16String = (mac::UniChar *)malloc(len * sizeof(mac::UniChar));
-    if (utf16String == NULL)
-      goto fail3;
+    if (cfpath)
+    {
 
-    mac::CFStringGetCharacters(mutableString, mac::CFRangeMake(0, len),
-			       utf16String);
+       CFMutableStringRef cfpath2 = CFStringCreateMutableCopy(NULL,0,cfpath);
+       CFRelease(cfpath);
+       CFStringNormalize(cfpath2,kCFStringNormalizationFormC);
+    
+       size_t n = CFStringGetLength(cfpath2);
+       for(size_t i =   0 ; i< n ;i++) {
+         UniChar uc = CFStringGetCharacterAtIndex(cfpath2,i);
+         resultString += (wchar_t)uc; // FIXME
+       }
 
-    for (int i = 0; i < len; i++)
-      resultString += utf16String[i];
+       CFRelease(cfpath2);  
 
-    free(utf16String);
-fail3:
-    CFRelease(mutableString);
-fail2:
-    CFRelease(string);
-fail1:
-
-    if (!resultString.IsEmpty())
-      return resultString;
-#else /* ENV_MACOSX */
-    UString resultString;
-    bool bret = utf8::ConvertUTF8ToUnicode(srcString,resultString);
-    if (bret) return resultString;
-#endif /* ENV_MACOSX */
+       return resultString;
+    }
   }
 
   UString resultString;
-  for (int i = 0; i < srcString.Length(); i++)
+  for (int i = 0; i < srcString.Len(); i++)
     resultString += wchar_t(srcString[i] & 255);
 
   return resultString;
@@ -83,63 +54,33 @@ fail1:
 
 AString UnicodeStringToMultiByte(const UString &srcString, UINT codePage)
 {
-  if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
+  if (!srcString.IsEmpty())
   {
-#ifdef ENV_MACOSX
-    AString resultString;
-    mac::CFStringRef string;
-    mac::CFMutableStringRef mutableString;
-    mac::UniChar *utf16String;
-    const wchar_t *src;
-    char *dst;
-    int len, max;
+    const wchar_t * wcs = &srcString[0];
+    char utf8[4096];
+    UniChar unipath[4096];
 
-    src = srcString;
-    len = wcslen(src);
+    size_t n = wcslen(wcs);
 
-    utf16String = (mac::UniChar *)malloc(len * sizeof(mac::UniChar));
-    if (utf16String == NULL)
-      goto fail1;
+    for(size_t i =   0 ; i<= n ;i++) {
+      unipath[i] = wcs[i];
+    }
 
-    for (int i = 0; i < len; i++)
-      utf16String[i] = src[i];
+    CFStringRef cfpath = CFStringCreateWithCharacters(NULL,unipath,n);
 
-    string = mac::CFStringCreateWithCharacters(NULL, utf16String, len);
-    if (string == NULL)
-      goto fail2;
+    CFMutableStringRef cfpath2 = CFStringCreateMutableCopy(NULL,0,cfpath);
+    CFRelease(cfpath);
+    CFStringNormalize(cfpath2,kCFStringNormalizationFormD);
+    
+    CFStringGetCString(cfpath2,(char *)utf8,4096,kCFStringEncodingUTF8);
 
-    mutableString = mac::CFStringCreateMutableCopy(NULL, 0, string);
-    if (mutableString == NULL)
-      goto fail3;
+    CFRelease(cfpath2);  
 
-    mac::CFStringNormalize(mutableString, mac::kCFStringNormalizationFormD);
-    len = mac::CFStringGetLength(mutableString);
-    max = mac::CFStringGetMaximumSizeForEncoding(len,
-						 mac::kCFStringEncodingUTF8);
-
-    dst = resultString.GetBuffer(max);
-    mac::CFStringGetCString(mutableString, dst, max,
-			    mac::kCFStringEncodingUTF8);
-    resultString.ReleaseBuffer();
-
-    mac::CFRelease(mutableString);
-fail3:
-    mac::CFRelease(string);
-fail2:
-    free(utf16String);
-fail1:
-
-    if (!resultString.IsEmpty())
-      return resultString;
-#else /* ENV_MACOSX */
-    AString resultString;
-    bool bret = utf8::ConvertUnicodeToUTF8(srcString,resultString);
-    if (bret) return resultString;
-#endif /* ENV_MACOSX */
+    return AString(utf8);
   }
 
   AString resultString;
-  for (int i = 0; i < srcString.Length(); i++)
+  for (int i = 0; i < srcString.Len(); i++)
   {
     if (srcString[i] >= 256) resultString += '?';
     else                     resultString += char(srcString[i]);
@@ -147,24 +88,22 @@ fail1:
   return resultString;
 }
 
-#else /* LOCALE_IS_UTF8 */
+#else /* __APPLE_CC__ */
+
+
+#include "UTFConvert.h"
 
 UString MultiByteToUnicodeString(const AString &srcString, UINT codePage)
 {
-#ifdef HAVE_MBSTOWCS
   if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
   {
     UString resultString;
-    int numChars = mbstowcs(resultString.GetBuffer(srcString.Length()),srcString,srcString.Length()+1);
-    if (numChars >= 0) {
-      resultString.ReleaseBuffer(numChars);
-      return resultString;
-    }
+    bool bret = ConvertUTF8ToUnicode(srcString,resultString);
+    if (bret) return resultString;
   }
-#endif
 
   UString resultString;
-  for (int i = 0; i < srcString.Length(); i++)
+  for (int i = 0; i < srcString.Len(); i++)
     resultString += wchar_t(srcString[i] & 255);
 
   return resultString;
@@ -172,21 +111,93 @@ UString MultiByteToUnicodeString(const AString &srcString, UINT codePage)
 
 AString UnicodeStringToMultiByte(const UString &srcString, UINT codePage)
 {
-#ifdef HAVE_WCSTOMBS
   if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
   {
     AString resultString;
-    int numRequiredBytes = srcString.Length() * 6+1;
-    int numChars = wcstombs(resultString.GetBuffer(numRequiredBytes),srcString,numRequiredBytes);
+    ConvertUnicodeToUTF8(srcString,resultString);
+    return resultString;
+  }
+
+  AString resultString;
+  for (int i = 0; i < srcString.Len(); i++)
+  {
+    if (srcString[i] >= 256) resultString += '?';
+    else                     resultString += char(srcString[i]);
+  }
+  return resultString;
+}
+
+#endif /* __APPLE_CC__ */
+
+#else /* LOCALE_IS_UTF8 */
+
+UString MultiByteToUnicodeString(const AString &srcString, UINT /* codePage */ )
+{
+#ifdef ENV_HAVE_MBSTOWCS
+  if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
+  {
+    UString resultString;
+    int numChars = mbstowcs(resultString.GetBuf(srcString.Len()),srcString,srcString.Len()+1);
     if (numChars >= 0) {
-      resultString.ReleaseBuffer(numChars);
+        resultString.ReleaseBuf_SetEnd(numChars);
+
+#if WCHAR_MAX > 0xffff
+      for (int i = numChars; i >= 0; i--) {
+        if (resultString[i] > 0xffff) {
+          wchar_t c = resultString[i] - 0x10000;
+          resultString.Delete(i);
+          wchar_t texts[]= { ((c >> 10) & 0x3ff) + 0xd800,  (c & 0x3ff) + 0xdc00 , 0 };
+          resultString.Insert(i, texts);
+          numChars++;
+        }
+      }
+#endif
+
       return resultString;
     }
   }
 #endif
 
+  UString resultString;
+  for (int i = 0; i < srcString.Len(); i++)
+    resultString += wchar_t(srcString[i] & 255);
+
+  return resultString;
+}
+
+AString UnicodeStringToMultiByte(const UString &src, UINT /* codePage */ )
+{
+#ifdef ENV_HAVE_WCSTOMBS
+#if WCHAR_MAX > 0xffff
+  UString srcString(src);
+  for (int i = 0; i < srcString.Len(); i++) {
+    if ((0xd800 <= srcString[i] && srcString[i] <= 0xdbff) && ((i + 1) < srcString.Len()) &&
+        (0xdc00 <= srcString[i + 1] && srcString[i + 1] < 0xE000)) {
+      wchar_t c = (((srcString[i] - 0xd800) << 10) | (srcString[i + 1] - 0xdc00)) + 0x10000;
+      srcString.Delete(i, 2);
+      srcString.Insert(i, c);
+    }
+  }
+#else
+  const UString &srcString = src;
+#endif
+
+  if ((global_use_utf16_conversion) && (!srcString.IsEmpty()))
+  {
+    AString resultString;
+    int numRequiredBytes = srcString.Len() * 6+1;
+    int numChars = wcstombs(resultString.GetBuf(numRequiredBytes),srcString,numRequiredBytes);
+    if (numChars >= 0) {
+      resultString.ReleaseBuf_SetEnd(numChars);
+      return resultString;
+    }
+  }
+#else
+  const UString &srcString = src;
+#endif
+
   AString resultString;
-  for (int i = 0; i < srcString.Length(); i++)
+  for (int i = 0; i < srcString.Len(); i++)
   {
     if (srcString[i] >= 256) resultString += '?';
     else                     resultString += char(srcString[i]);
@@ -195,4 +206,15 @@ AString UnicodeStringToMultiByte(const UString &srcString, UINT codePage)
 }
 
 #endif /* LOCALE_IS_UTF8 */
+
+
+void MultiByteToUnicodeString2(UString &dest, const AString &srcString, UINT codePage)
+{
+  dest = MultiByteToUnicodeString(srcString,codePage);
+}
+
+void UnicodeStringToMultiByte2(AString &dest, const UString &srcString, UINT codePage)
+{
+  dest = UnicodeStringToMultiByte(srcString,codePage);
+}
 

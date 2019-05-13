@@ -41,7 +41,7 @@ typedef struct tagLVCOLUMNW
     LPWSTR pszText;
     int cchTextMax;
     int iSubItem;
-    int iOrder; // FIXME
+    // FIXME int iOrder; // not available
 } LVCOLUMNW;
 
 #define  LVCOLUMN   LVCOLUMNW
@@ -87,70 +87,103 @@ namespace NControl {
 
 class CListView // : public NWindows::CWindow
 {
-	wxListCtrl *_list;
+    wxListCtrl *_list;
 public:
-	CListView() : _list(0) {}
-	void Attach(wxWindow * newWindow);
+    CListView() : _list(0) {}
+    void Attach(wxWindow * newWindow);
 
-	operator HWND() const;
+    operator HWND() const;
 
-	int GetItemCount() const;
+        void SetUnicodeFormat() { /* FIXME */ ; }
 
-	int InsertItem(int index, LPCTSTR text);
-	int InsertItem(const LVITEM* item);
 
-	void SetItem(const LVITEM* item);
+    int GetItemCount() const;
 
-	int SetSubItem(int index, int subIndex, LPCTSTR text);
+    int InsertItem(int index, LPCTSTR text);
+    int InsertItem(const LVITEM* item);
 
-	void SetUnicodeFormat(bool fUnicode) { return ;  }
+    void SetItem(const LVITEM* item);
 
-	void InsertColumn(int columnIndex, LPCTSTR text, int width);
+    int SetSubItem(int index, int subIndex, LPCTSTR text);
 
-	void InsertColumn(int columnIndex, const LVCOLUMNW *columnInfo);
+    void SetUnicodeFormat(bool fUnicode) { return ;  }
 
-	void DeleteAllItems();
+    void InsertColumn(int columnIndex, LPCTSTR text, int width);
 
-	void SetRedraw(bool);
+    void InsertColumn(int columnIndex, const LVCOLUMNW *columnInfo);
 
-	void SetItemCount(int );
+    void DeleteAllItems();
 
-	void InvalidateRect(void *, bool);
+    void SetRedraw(bool);
 
-	int GetSelectedCount() const;
+    void SetItemCount(int );
 
-	void /* bool */ EnsureVisible(int index, bool partialOK);
+    void InvalidateRect(void *, bool);
 
-	void SetItemState(int index, UINT state, UINT mask);
+    int GetSelectedCount() const;
 
-	UINT GetItemState(int index, UINT mask) const;
+    void /* bool */ EnsureVisible(int index, bool partialOK);
 
-	void /* bool */  Update();
+    void SetItemState(int index, UINT state, UINT mask);
 
-	bool DeleteColumn(int columnIndex);
+    void SetItemState_FocusedSelected(int index) { SetItemState(index, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED); }
 
-	bool GetItemParam(int itemIndex, LPARAM &param) const;
+    void SetItemState_Selected(int index, bool select) { SetItemState(index, select ? LVIS_SELECTED : 0, LVIS_SELECTED); }
+    void SetItemState_Selected(int index) { SetItemState(index, LVIS_SELECTED, LVIS_SELECTED); }
 
-	int GetNextItem(int startIndex, UINT flags) const;
+    UINT GetItemState(int index, UINT mask) const;
 
-	int GetFocusedItem() const;
+    bool IsItemSelected(int index) const { return GetItemState(index, LVIS_SELECTED) == LVIS_SELECTED; }
 
-	void RedrawAllItems();
-	  // FIXME added
-	int GetColumnCount();
+    void /* bool */  Update();
 
-	void SetFocus();
+    bool DeleteColumn(int columnIndex);
 
-	void RedrawItem(int item);
+    bool GetItemParam(int itemIndex, LPARAM &param) const;
 
-	bool SortItems(PFNLVCOMPARE compareFunction, LPARAM dataParam);
+    int GetNextItem(int startIndex, UINT flags) const;
 
-	bool GetColumn(int columnIndex, LVCOLUMN* columnInfo);
+    int GetFocusedItem() const;
 
-	// HWND EditLabel(int itemIndex)
-	void EditLabel(int itemIndex);
+    void RedrawAllItems();
+      // FIXME added
+    int GetColumnCount();
+
+    void SetFocus();
+
+    void RedrawItem(int item);
+
+    bool SortItems(PFNLVCOMPARE compareFunction, LPARAM dataParam);
+
+    bool GetColumn(int columnIndex, LVCOLUMN* columnInfo);
+
+    // HWND EditLabel(int itemIndex)
+    void EditLabel(int itemIndex);
+
+    bool SetColumnWidthAuto(int iCol) {
+        return true; // FIXME SetColumnWidth(iCol, LVSCW_AUTOSIZE);
+    }
+
+private:
+    void _InsertColumn(int columnIndex, LPCTSTR text, int format, int width);
 
 };
+
+class CListView2: public CListView
+{
+// FIXME   WNDPROC _origWindowProc;
+public:
+  // void SetWindowProc();
+  virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
+};
+
+/*
+class CListView3: public CListView2
+{
+public:
+  virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam);
+};
+*/
 
 }}
 #endif

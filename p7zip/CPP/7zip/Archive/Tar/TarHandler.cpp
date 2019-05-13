@@ -2,51 +2,114 @@
 
 #include "StdAfx.h"
 
-#include "Common/ComTry.h"
-#include "Common/Defs.h"
-#include "Common/NewHandler.h"
-#include "Common/StringConvert.h"
+#include "../../../Common/ComTry.h"
+#include "../../../Common/IntToString.h"
+#include "../../../Common/StringConvert.h"
+#include "../../../Common/UTFConvert.h"
 
-#include "Windows/PropVariant.h"
-#include "Windows/Time.h"
+#include "../../../Windows/TimeUtils.h"
 
 #include "../../Common/LimitedStreams.h"
+#include "../../Common/MethodProps.h"
 #include "../../Common/ProgressUtils.h"
+#include "../../Common/StreamObjects.h"
+#include "../../Common/StreamUtils.h"
 
 #include "../Common/ItemNameUtils.h"
 
 #include "TarHandler.h"
-#include "TarIn.h"
 
 using namespace NWindows;
 
 namespace NArchive {
 namespace NTar {
 
-STATPROPSTG kProps[] =
+static const UINT k_DefaultCodePage = CP_OEMCP; // it uses it if UTF8 check in names shows error
+
+
+static const Byte kProps[] =
 {
-  { NULL, kpidPath, VT_BSTR},
-  { NULL, kpidIsDir, VT_BOOL},
-  { NULL, kpidSize, VT_UI8},
-  { NULL, kpidPackSize, VT_UI8},
-  { NULL, kpidMTime, VT_FILETIME},
-  { NULL, kpidPosixAttrib, VT_UI4},
-  { NULL, kpidUser, VT_BSTR},
-  { NULL, kpidGroup, VT_BSTR},
-  { NULL, kpidLink, VT_BSTR}
+  kpidPath,
+  kpidIsDir,
+  kpidSize,
+  kpidPackSize,
+  kpidMTime,
+  kpidPosixAttrib,
+  kpidUser,
+  kpidGroup,
+  kpidSymLink,
+  kpidHardLink,
+  // kpidLinkType
+};
+
+static const Byte kArcProps[] =
+{
+  kpidHeadersSize,
+  kpidCodePage
 };
 
 IMP_IInArchive_Props
-IMP_IInArchive_ArcProps_NO_Table
+IMP_IInArchive_ArcProps
 
 STDMETHODIMP CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value)
 {
   NCOM::CPropVariant prop;
-  switch(propID)
+  switch (propID)
   {
     case kpidPhySize: if (_phySizeDefined) prop = _phySize; break;
+    case kpidHeadersSize: if (_phySizeDefined) prop = _headersSize; break;
+    case kpidErrorFlags:
+    {
+      UInt32 flags = 0;
+      if (!_isArc)
+        flags |= kpv_ErrorFlags_IsNotArc;
+      else switch (_error)
+      {
+        case k_ErrorType_UnexpectedEnd: flags = kpv_ErrorFlags_UnexpectedEnd; break;
+        case k_ErrorType_Corrupted: flags = kpv_ErrorFlags_HeadersError; break;
+      }
+      prop = flags;
+      break;
+    }
+
+    case kpidCodePage:
+    {
+      const char *name = NULL;
+      switch (_openCodePage)
+      {
+        case CP_OEMCP: name = "OEM"; break;
+        case CP_UTF8: name = "UTF-8";  break;
+      }
+      if (name != NULL)
+        prop = name;
+      else
+      {
+        char sz[16];
+        ConvertUInt32ToString(_openCodePage, sz);
+        prop = sz;
+      };
+      break;
+    }
   }
   prop.Detach(value);
+  return S_OK;
+}
+
+HRESULT CHandler::ReadItem2(ISequentialInStream *stream, bool &filled, CItemEx &item)
+{
+  item.HeaderPos = _phySize;
+  RINOK(ReadItem(stream, filled, item, _error));
+  if (filled)
+  {
+    /*
+    if (item.IsSparse())
+      _isSparse = true;
+    */
+    if (item.IsPaxExtendedHeader())
+      _thereIsPaxExtendedHeader = true;
+  }
+  _phySize += item.HeaderSize;
+  _headersSize += item.HeaderSize;
   return S_OK;
 }
 
@@ -58,42 +121,75 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
     RINOK(stream->Seek(0, STREAM_SEEK_SET, NULL));
   }
   
-  _isGood = true;
-  UInt64 pos = 0;
+  _phySizeDefined = true;
+  
+  bool utf8_OK = true;
+  if (!_forceCodePage)
+  {
+    if (!utf8_OK)
+      _curCodePage = k_DefaultCodePage;
+  }
+
   for (;;)
   {
     CItemEx item;
     bool filled;
-    item.HeaderPosition = pos;
-    RINOK(ReadItem(stream, filled, item));
+    RINOK(ReadItem2(stream, filled, item));
     if (!filled)
       break;
+
+    _isArc = true;
     _items.Add(item);
-    
-    RINOK(stream->Seek(item.GetPackSize(), STREAM_SEEK_CUR, &pos));
-    if (pos > endPos)
-      return S_FALSE;
-    if (pos == endPos)
+
+    if (!_forceCodePage)
     {
-      _isGood = false;
+      if (utf8_OK) utf8_OK = CheckUTF8(item.Name, item.NameCouldBeReduced);
+      if (utf8_OK) utf8_OK = CheckUTF8(item.LinkName, item.LinkNameCouldBeReduced);
+      if (utf8_OK) utf8_OK = CheckUTF8(item.User);
+      if (utf8_OK) utf8_OK = CheckUTF8(item.Group);
+    }
+    
+    RINOK(stream->Seek(item.GetPackSizeAligned(), STREAM_SEEK_CUR, &_phySize));
+    if (_phySize > endPos)
+    {
+      _error = k_ErrorType_UnexpectedEnd;
       break;
     }
-    if (callback != NULL)
+    /*
+    if (_phySize == endPos)
+    {
+      _errorMessage = "There are no trailing zero-filled records";
+      break;
+    }
+    */
+    if (callback)
     {
       if (_items.Size() == 1)
       {
         RINOK(callback->SetTotal(NULL, &endPos));
       }
-      if (_items.Size() % 100 == 0)
+      if ((_items.Size() & 0x3FF) == 0)
       {
         UInt64 numFiles = _items.Size();
-        RINOK(callback->SetCompleted(&numFiles, &pos));
+        RINOK(callback->SetCompleted(&numFiles, &_phySize));
       }
     }
   }
 
+  if (!_forceCodePage)
+  {
+    if (!utf8_OK)
+      _curCodePage = k_DefaultCodePage;
+  }
+  _openCodePage = _curCodePage;
+
   if (_items.Size() == 0)
   {
+    if (_error != k_ErrorType_OK)
+    {
+      _isArc = false;
+      return S_FALSE;
+    }
     CMyComPtr<IArchiveOpenVolumeCallback> openVolumeCallback;
     if (!callback)
       return S_FALSE;
@@ -105,11 +201,12 @@ HRESULT CHandler::Open2(IInStream *stream, IArchiveOpenCallback *callback)
       return S_FALSE;
     if (prop.vt != VT_BSTR)
       return S_FALSE;
-    UString baseName = prop.bstrVal;
-    baseName = baseName.Right(4);
-    if (baseName.CompareNoCase(L".tar") != 0)
+    unsigned len = MyStringLen(prop.bstrVal);
+    if (len < 4 || MyStringCompareNoCase(prop.bstrVal + len - 4, L".tar") != 0)
       return S_FALSE;
   }
+
+  _isArc = true;
   return S_OK;
 }
 
@@ -129,14 +226,22 @@ STDMETHODIMP CHandler::OpenSeq(ISequentialInStream *stream)
 {
   Close();
   _seqStream = stream;
+  _isArc = true;
   return S_OK;
 }
 
 STDMETHODIMP CHandler::Close()
 {
+  _isArc = false;
+  _error = k_ErrorType_OK;
+
   _phySizeDefined = false;
+  _phySize = 0;
+  _headersSize = 0;
   _curIndex = 0;
   _latestIsRead = false;
+  // _isSparse = false;
+  _thereIsPaxExtendedHeader = false;
   _items.Clear();
   _seqStream.Release();
   _stream.Release();
@@ -153,6 +258,8 @@ CHandler::CHandler()
 {
   copyCoderSpec = new NCompress::CCopyCoder();
   copyCoder = copyCoderSpec;
+  _openCodePage = CP_UTF8;
+  Init();
 }
 
 HRESULT CHandler::SkipTo(UInt32 index)
@@ -161,33 +268,48 @@ HRESULT CHandler::SkipTo(UInt32 index)
   {
     if (_latestIsRead)
     {
-      UInt64 packSize = _latestItem.GetPackSize();
+      UInt64 packSize = _latestItem.GetPackSizeAligned();
       RINOK(copyCoderSpec->Code(_seqStream, NULL, &packSize, &packSize, NULL));
+      _phySize += copyCoderSpec->TotalSize;
+      if (copyCoderSpec->TotalSize != packSize)
+      {
+        _error = k_ErrorType_UnexpectedEnd;
+        return S_FALSE;
+      }
       _latestIsRead = false;
       _curIndex++;
     }
     else
     {
       bool filled;
-      // item.HeaderPosition = pos;
-      RINOK(ReadItem(_seqStream, filled, _latestItem));
+      RINOK(ReadItem2(_seqStream, filled, _latestItem));
       if (!filled)
+      {
+        _phySizeDefined = true;
         return E_INVALIDARG;
+      }
       _latestIsRead = true;
     }
   }
   return S_OK;
 }
 
-static UString TarStringToUnicode(const AString &s)
+void CHandler::TarStringToUnicode(const AString &s, NWindows::NCOM::CPropVariant &prop, bool toOs) const
 {
-  return MultiByteToUnicodeString(s, CP_OEMCP);
+  UString dest;
+  if (_curCodePage == CP_UTF8)
+    ConvertUTF8ToUnicode(s, dest);
+  else
+    MultiByteToUnicodeString2(dest, s, _curCodePage);
+  if (toOs)
+    NItemName::ConvertToOSName2(dest);
+  prop = dest;
 }
 
 STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
 {
   COM_TRY_BEGIN
-  NWindows::NCOM::CPropVariant prop;
+  NCOM::CPropVariant prop;
 
   const CItemEx *item;
   if (_stream)
@@ -203,32 +325,34 @@ STDMETHODIMP CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
     }
   }
 
-  switch(propID)
+  switch (propID)
   {
-    case kpidPath:  prop = NItemName::GetOSName2(TarStringToUnicode(item->Name)); break;
-    case kpidIsDir:  prop = item->IsDir(); break;
-    case kpidSize:  prop = item->Size; break;
-    case kpidPackSize:  prop = item->GetPackSize(); break;
+    case kpidPath: TarStringToUnicode(item->Name, prop, true); break;
+    case kpidIsDir: prop = item->IsDir(); break;
+    case kpidSize: prop = item->GetUnpackSize(); break;
+    case kpidPackSize: prop = item->GetPackSizeAligned(); break;
     case kpidMTime:
       if (item->MTime != 0)
       {
         FILETIME ft;
-        NTime::UnixTimeToFileTime(item->MTime, ft);
-        prop = ft;
+        if (NTime::UnixTime64ToFileTime(item->MTime, ft))
+          prop = ft;
       }
       break;
     case kpidPosixAttrib: prop = item->Mode; break;
-    case kpidUser:  prop = TarStringToUnicode(item->User); break;
-    case kpidGroup:  prop = TarStringToUnicode(item->Group); break;
-    case kpidLink:  prop = TarStringToUnicode(item->LinkName); break;
+    case kpidUser:  TarStringToUnicode(item->User, prop); break;
+    case kpidGroup: TarStringToUnicode(item->Group, prop); break;
+    case kpidSymLink:  if (item->LinkFlag == NFileHeader::NLinkFlag::kSymLink  && !item->LinkName.IsEmpty()) TarStringToUnicode(item->LinkName, prop); break;
+    case kpidHardLink: if (item->LinkFlag == NFileHeader::NLinkFlag::kHardLink && !item->LinkName.IsEmpty()) TarStringToUnicode(item->LinkName, prop); break;
+    // case kpidLinkType: prop = (int)item->LinkFlag; break;
   }
   prop.Detach(value);
   return S_OK;
   COM_TRY_END
 }
 
-HRESULT CHandler::Extract(const UInt32* indices, UInt32 numItems,
-    Int32 _aTestMode, IArchiveExtractCallback *extractCallback)
+HRESULT CHandler::Extract(const UInt32 *indices, UInt32 numItems,
+    Int32 testMode, IArchiveExtractCallback *extractCallback)
 {
   COM_TRY_BEGIN
   ISequentialInStream *stream = _seqStream;
@@ -236,8 +360,7 @@ HRESULT CHandler::Extract(const UInt32* indices, UInt32 numItems,
   if (!seqMode)
     stream = _stream;
 
-  bool testMode = (_aTestMode != 0);
-  bool allFilesMode = (numItems == (UInt32)-1);
+  bool allFilesMode = (numItems == (UInt32)(Int32)-1);
   if (allFilesMode)
     numItems = _items.Size();
   if (_stream && numItems == 0)
@@ -245,7 +368,7 @@ HRESULT CHandler::Extract(const UInt32* indices, UInt32 numItems,
   UInt64 totalSize = 0;
   UInt32 i;
   for (i = 0; i < numItems; i++)
-    totalSize += _items[allFilesMode ? i : indices[i]].Size;
+    totalSize += _items[allFilesMode ? i : indices[i]].GetUnpackSize();
   extractCallback->SetTotal(totalSize);
 
   UInt64 totalPackSize;
@@ -269,8 +392,8 @@ HRESULT CHandler::Extract(const UInt32* indices, UInt32 numItems,
     RINOK(lps->SetCur());
     CMyComPtr<ISequentialOutStream> realOutStream;
     Int32 askMode = testMode ?
-        NArchive::NExtract::NAskMode::kTest :
-        NArchive::NExtract::NAskMode::kExtract;
+        NExtract::NAskMode::kTest :
+        NExtract::NAskMode::kExtract;
     Int32 index = allFilesMode ? i : indices[i];
     const CItemEx *item;
     if (seqMode)
@@ -285,54 +408,270 @@ HRESULT CHandler::Extract(const UInt32* indices, UInt32 numItems,
       item = &_items[index];
 
     RINOK(extractCallback->GetStream(index, &realOutStream, askMode));
-    totalSize += item->Size;
-    totalPackSize += item->GetPackSize();
+    UInt64 unpackSize = item->GetUnpackSize();
+    totalSize += unpackSize;
+    totalPackSize += item->GetPackSizeAligned();
     if (item->IsDir())
     {
       RINOK(extractCallback->PrepareOperation(askMode));
-      RINOK(extractCallback->SetOperationResult(NArchive::NExtract::NOperationResult::kOK));
+      RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kOK));
       continue;
     }
     bool skipMode = false;
     if (!testMode && !realOutStream)
     {
       if (!seqMode)
+      {
+        /*
+        // probably we must show extracting info it callback handler instead
+        if (item->IsHardLink() ||
+            item->IsSymLink())
+        {
+          RINOK(extractCallback->PrepareOperation(askMode));
+          RINOK(extractCallback->SetOperationResult(NExtract::NOperationResult::kOK));
+        }
+        */
         continue;
+      }
       skipMode = true;
-      askMode = NArchive::NExtract::NAskMode::kSkip;
+      askMode = NExtract::NAskMode::kSkip;
     }
     RINOK(extractCallback->PrepareOperation(askMode));
 
     outStreamSpec->SetStream(realOutStream);
     realOutStream.Release();
-    outStreamSpec->Init(skipMode ? 0 : item->Size, true);
+    outStreamSpec->Init(skipMode ? 0 : unpackSize, true);
 
-    if (!seqMode)
+    Int32 opRes = NExtract::NOperationResult::kOK;
+    CMyComPtr<ISequentialInStream> inStream2;
+    if (!item->IsSparse())
+      inStream2 = inStream;
+    else
     {
-      RINOK(_stream->Seek(item->GetDataPosition(), STREAM_SEEK_SET, NULL));
+      GetStream(index, &inStream2);
+      if (!inStream2)
+        return E_FAIL;
     }
-    streamSpec->Init(item->GetPackSize());
-    RINOK(copyCoder->Code(inStream, outStream, NULL, NULL, progress));
+
+    {
+      if (item->IsSymLink())
+      {
+        RINOK(WriteStream(outStreamSpec, (const char *)item->LinkName, item->LinkName.Len()));
+      }
+      else
+      {
+        if (!seqMode)
+        {
+          RINOK(_stream->Seek(item->GetDataPosition(), STREAM_SEEK_SET, NULL));
+        }
+        streamSpec->Init(item->GetPackSizeAligned());
+        RINOK(copyCoder->Code(inStream2, outStream, NULL, NULL, progress));
+      }
+      if (outStreamSpec->GetRem() != 0)
+        opRes = NExtract::NOperationResult::kDataError;
+    }
     if (seqMode)
     {
       _latestIsRead = false;
       _curIndex++;
     }
     outStreamSpec->ReleaseStream();
-    RINOK(extractCallback->SetOperationResult(outStreamSpec->GetRem() == 0 ?
-        NArchive::NExtract::NOperationResult::kOK:
-        NArchive::NExtract::NOperationResult::kDataError));
+    RINOK(extractCallback->SetOperationResult(opRes));
   }
   return S_OK;
   COM_TRY_END
 }
 
+class CSparseStream:
+  public IInStream,
+  public CMyUnknownImp
+{
+  UInt64 _phyPos;
+  UInt64 _virtPos;
+  bool _needStartSeek;
+
+public:
+  CHandler *Handler;
+  CMyComPtr<IUnknown> HandlerRef;
+  unsigned ItemIndex;
+  CRecordVector<UInt64> PhyOffsets;
+
+  MY_UNKNOWN_IMP2(ISequentialInStream, IInStream)
+  STDMETHOD(Read)(void *data, UInt32 size, UInt32 *processedSize);
+  STDMETHOD(Seek)(Int64 offset, UInt32 seekOrigin, UInt64 *newPosition);
+
+  void Init()
+  {
+    _virtPos = 0;
+    _phyPos = 0;
+    _needStartSeek = true;
+  }
+};
+
+
+STDMETHODIMP CSparseStream::Read(void *data, UInt32 size, UInt32 *processedSize)
+{
+  if (processedSize)
+    *processedSize = 0;
+  if (size == 0)
+    return S_OK;
+  const CItemEx &item = Handler->_items[ItemIndex];
+  if (_virtPos >= item.Size)
+    return S_OK;
+  {
+    UInt64 rem = item.Size - _virtPos;
+    if (size > rem)
+      size = (UInt32)rem;
+  }
+  
+  HRESULT res = S_OK;
+
+  if (item.SparseBlocks.IsEmpty())
+    memset(data, 0, size);
+  else
+  {
+    unsigned left = 0, right = item.SparseBlocks.Size();
+    for (;;)
+    {
+      unsigned mid = (left + right) / 2;
+      if (mid == left)
+        break;
+      if (_virtPos < item.SparseBlocks[mid].Offset)
+        right = mid;
+      else
+        left = mid;
+    }
+    
+    const CSparseBlock &sb = item.SparseBlocks[left];
+    UInt64 relat = _virtPos - sb.Offset;
+    
+    if (_virtPos >= sb.Offset && relat < sb.Size)
+    {
+      UInt64 rem = sb.Size - relat;
+      if (size > rem)
+        size = (UInt32)rem;
+      UInt64 phyPos = PhyOffsets[left] + relat;
+      if (_needStartSeek || _phyPos != phyPos)
+      {
+        RINOK(Handler->_stream->Seek(item.GetDataPosition() + phyPos, STREAM_SEEK_SET, NULL));
+        _needStartSeek = false;
+        _phyPos = phyPos;
+      }
+      res = Handler->_stream->Read(data, size, &size);
+      _phyPos += size;
+    }
+    else
+    {
+      UInt64 next = item.Size;
+      if (_virtPos < sb.Offset)
+        next = sb.Offset;
+      else if (left + 1 < item.SparseBlocks.Size())
+        next = item.SparseBlocks[left + 1].Offset;
+      UInt64 rem = next - _virtPos;
+      if (size > rem)
+        size = (UInt32)rem;
+      memset(data, 0, size);
+    }
+  }
+  
+  _virtPos += size;
+  if (processedSize)
+    *processedSize = size;
+  return res;
+}
+
+STDMETHODIMP CSparseStream::Seek(Int64 offset, UInt32 seekOrigin, UInt64 *newPosition)
+{
+  switch (seekOrigin)
+  {
+    case STREAM_SEEK_SET: break;
+    case STREAM_SEEK_CUR: offset += _virtPos; break;
+    case STREAM_SEEK_END: offset += Handler->_items[ItemIndex].Size; break;
+    default: return STG_E_INVALIDFUNCTION;
+  }
+  if (offset < 0)
+    return HRESULT_WIN32_ERROR_NEGATIVE_SEEK;
+  _virtPos = offset;
+  if (newPosition)
+    *newPosition = _virtPos;
+  return S_OK;
+}
+
 STDMETHODIMP CHandler::GetStream(UInt32 index, ISequentialInStream **stream)
 {
   COM_TRY_BEGIN
+  
   const CItemEx &item = _items[index];
-  return CreateLimitedInStream(_stream, item.GetDataPosition(), item.Size, stream);
+
+  if (item.IsSparse())
+  {
+    CSparseStream *streamSpec = new CSparseStream;
+    CMyComPtr<IInStream> streamTemp = streamSpec;
+    streamSpec->Init();
+    streamSpec->Handler = this;
+    streamSpec->HandlerRef = (IInArchive *)this;
+    streamSpec->ItemIndex = index;
+    streamSpec->PhyOffsets.Reserve(item.SparseBlocks.Size());
+    UInt64 offs = 0;
+    FOR_VECTOR(i, item.SparseBlocks)
+    {
+      const CSparseBlock &sb = item.SparseBlocks[i];
+      streamSpec->PhyOffsets.AddInReserved(offs);
+      offs += sb.Size;
+    }
+    *stream = streamTemp.Detach();
+    return S_OK;
+  }
+  
+  if (item.IsSymLink())
+  {
+    Create_BufInStream_WithReference((const Byte *)(const char *)item.LinkName, item.LinkName.Len(), (IInArchive *)this, stream);
+    return S_OK;
+  }
+  
+  return CreateLimitedInStream(_stream, item.GetDataPosition(), item.PackSize, stream);
+  
   COM_TRY_END
+}
+
+void CHandler::Init()
+{
+  _forceCodePage = false;
+  // _codePage = CP_OEMCP;
+  _curCodePage = _specifiedCodePage = CP_UTF8;  // CP_OEMCP;
+  _thereIsPaxExtendedHeader = false;
+}
+
+STDMETHODIMP CHandler::SetProperties(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps)
+{
+  Init();
+
+  for (UInt32 i = 0; i < numProps; i++)
+  {
+    UString name = names[i];
+    name.MakeLower_Ascii();
+    if (name.IsEmpty())
+      return E_INVALIDARG;
+
+    const PROPVARIANT &prop = values[i];
+
+    if (name[0] == L'x')
+    {
+      // some clients write 'x' property. So we support it
+      UInt32 level = 0;
+      RINOK(ParsePropToUInt32(name.Ptr(1), prop, level));
+    }
+    else if (name.IsEqualTo("cp"))
+    {
+      UInt32 cp = CP_OEMCP;
+      RINOK(ParsePropToUInt32(L"", prop, cp));
+      _forceCodePage = true;
+      _curCodePage = _specifiedCodePage = cp;
+    }
+    else
+      return E_INVALIDARG;
+  }
+  return S_OK;
 }
 
 }}

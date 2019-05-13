@@ -1,30 +1,23 @@
 // CompressCall.h
 
-#ifndef __COMPRESSCALL_H
-#define __COMPRESSCALL_H
+#ifndef __COMPRESS_CALL_H
+#define __COMPRESS_CALL_H
 
-#include "Common/MyString.h"
-#include "Windows/Synchronization.h"
+#include "../../../Common/MyString.h"
 
-HRESULT MyCreateProcess(const UString &params,
-   LPCWSTR lpCurrentDirectory, bool waitFinish,
-   NWindows::NSynchronization::CBaseEvent *event);
+UString GetQuotedString(const UString &s);
 
 HRESULT CompressFiles(
-    const UString &curDir,
-    const UString &archiveName,
-    const UString &archiveType,
+    const UString &arcPathPrefix,
+    const UString &arcName,
+    const UString &arcType,
+    bool addExtension,
     const UStringVector &names,
-    // const UString &outFolder,
     bool email, bool showDialog, bool waitFinish);
 
-HRESULT ExtractArchives(
-    const UStringVector &archivePaths,
-    const UString &outFolder, bool showDialog);
-
-HRESULT TestArchives(const UStringVector &archivePaths);
-
-HRESULT Benchmark();
+void ExtractArchives(const UStringVector &arcPaths, const UString &outFolder, bool showDialog, bool elimDup);
+void TestArchives(const UStringVector &arcPaths);
+void CalcChecksum(const UStringVector &paths, const UString &methodName);
+void Benchmark(bool totalMode);
 
 #endif
-

@@ -3,7 +3,7 @@
 #ifndef __WINDOWS_COM_H
 #define __WINDOWS_COM_H
 
-#include "Common/MyString.h"
+#include "../Common/MyString.h"
 
 namespace NWindows {
 namespace NCOM {
@@ -13,8 +13,16 @@ namespace NCOM {
 class CComInitializer
 {
 public:
-  CComInitializer() { CoInitialize(NULL);};
-  ~CComInitializer() { CoUninitialize(); };
+  CComInitializer()
+  {
+    #ifdef UNDER_CE
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    #else
+    // it's single thread. Do we need multithread?
+    CoInitialize(NULL);
+    #endif
+  };
+  ~CComInitializer() { CoUninitialize(); }
 };
 
 class CStgMedium
@@ -37,6 +45,7 @@ public:
 
 #endif
 
+/*
 //////////////////////////////////
 // GUID <--> String Conversions
 UString GUIDToStringW(REFGUID guid);
@@ -45,7 +54,7 @@ AString GUIDToStringA(REFGUID guid);
   #define GUIDToString GUIDToStringW
 #else
   #define GUIDToString GUIDToStringA
-#endif // !UNICODE
+#endif
 
 HRESULT StringToGUIDW(const wchar_t *string, GUID &classID);
 HRESULT StringToGUIDA(const char *string, GUID &classID);
@@ -53,9 +62,9 @@ HRESULT StringToGUIDA(const char *string, GUID &classID);
   #define StringToGUID StringToGUIDW
 #else
   #define StringToGUID StringToGUIDA
-#endif // !UNICODE
+#endif
+*/
 
-  
 }}
 
 #endif

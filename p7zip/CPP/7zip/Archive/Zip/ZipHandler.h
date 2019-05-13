@@ -3,7 +3,7 @@
 #ifndef __ZIP_HANDLER_H
 #define __ZIP_HANDLER_H
 
-#include "Common/DynamicBuffer.h"
+#include "../../../Common/DynamicBuffer.h"
 #include "../../ICoder.h"
 #include "../IArchive.h"
 
@@ -11,10 +11,6 @@
 
 #include "ZipIn.h"
 #include "ZipCompressionMode.h"
-
-#ifdef COMPRESS_MT
-#include "../../../Windows/System.h"
-#endif
 
 namespace NArchive {
 namespace NZip {
@@ -37,7 +33,7 @@ public:
   INTERFACE_IInArchive(;)
   INTERFACE_IOutArchive(;)
 
-  STDMETHOD(SetProperties)(const wchar_t **names, const PROPVARIANT *values, Int32 numProperties);
+  STDMETHOD(SetProperties)(const wchar_t * const *names, const PROPVARIANT *values, UInt32 numProps);
 
   DECL_ISetCompressCodecsInfo
 
@@ -46,48 +42,30 @@ private:
   CObjectVector<CItemEx> m_Items;
   CInArchive m_Archive;
 
-  int m_Level;
+  CBaseProps _props;
+
   int m_MainMethod;
-  UInt32 m_DicSize;
-  UInt32 m_Algo;
-  UInt32 m_NumPasses;
-  UInt32 m_NumFastBytes;
-  UInt32 m_NumMatchFinderCycles;
-  bool m_NumMatchFinderCyclesDefined;
-
   bool m_ForceAesMode;
-  bool m_IsAesMode;
-  Byte m_AesKeyMode;
-
   bool m_WriteNtfsTimeExtra;
-  bool m_ForseLocal;
-  bool m_ForseUtf8;
-
-  #ifdef COMPRESS_MT
-  UInt32 _numThreads;
-  #endif
+  bool _removeSfxBlock;
+  bool m_ForceLocal;
+  bool m_ForceUtf8;
+  bool _forceCodePage;
+  UInt32 _specifiedCodePage;
 
   DECL_EXTERNAL_CODECS_VARS
 
-  void InitMethodProperties()
+  void InitMethodProps()
   {
-    m_Level = -1;
+    _props.Init();
     m_MainMethod = -1;
-    m_Algo =
-    m_DicSize =
-    m_NumPasses =
-    m_NumFastBytes =
-    m_NumMatchFinderCycles = 0xFFFFFFFF;
-    m_NumMatchFinderCyclesDefined = false;
     m_ForceAesMode = false;
-    m_IsAesMode = false;
-    m_AesKeyMode = 3; // aes-256
-    m_WriteNtfsTimeExtra = false;
-    m_ForseLocal = false;
-    m_ForseUtf8 = false;
-    #ifdef COMPRESS_MT
-    _numThreads = NWindows::NSystem::GetNumberOfProcessors();;
-    #endif
+    m_WriteNtfsTimeExtra = true;
+    _removeSfxBlock = false;
+    m_ForceLocal = false;
+    m_ForceUtf8 = false;
+    _forceCodePage = false;
+    _specifiedCodePage = CP_OEMCP;
   }
 };
 

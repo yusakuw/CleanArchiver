@@ -5,9 +5,18 @@
 #include "../../Common/RegisterArc.h"
 
 #include "WimHandler.h"
-static IInArchive *CreateArc() { return new NArchive::NWim::CHandler;  }
 
-static CArcInfo g_ArcInfo =
-  { L"Wim", L"wim swm", 0, 0xE6, { 'M', 'S', 'W', 'I', 'M', 0, 0, 0 }, 8, false, CreateArc, 0 };
+namespace NArchive {
+namespace NWim {
 
-REGISTER_ARC(Wim)
+REGISTER_ARC_IO(
+  "wim", "wim swm esd", 0, 0xE6,
+  kSignature,
+  0,
+  NArcInfoFlags::kAltStreams |
+  NArcInfoFlags::kNtSecure |
+  NArcInfoFlags::kSymLinks |
+  NArcInfoFlags::kHardLinks
+  , NULL)
+
+}}

@@ -1,36 +1,49 @@
 // MultiStream.h
 
-#ifndef __MULTISTREAM_H
-#define __MULTISTREAM_H
+#ifndef __MULTI_STREAM_H
+#define __MULTI_STREAM_H
 
 #include "../../../Common/MyCom.h"
 #include "../../../Common/MyVector.h"
-#include "../../Archive/IArchive.h"
+
+#include "../../IStream.h"
 
 class CMultiStream:
   public IInStream,
   public CMyUnknownImp
 {
-  int _streamIndex;
   UInt64 _pos;
-  UInt64 _seekPos;
   UInt64 _totalLength;
+  unsigned _streamIndex;
+
 public:
+
   struct CSubStreamInfo
   {
     CMyComPtr<IInStream> Stream;
-    UInt64 Pos;
     UInt64 Size;
+    UInt64 GlobalOffset;
+    UInt64 LocalPos;
+
+    CSubStreamInfo(): Size(0), GlobalOffset(0), LocalPos(0) {}
   };
+  
   CObjectVector<CSubStreamInfo> Streams;
-  void Init()
+  
+  HRESULT Init()
   {
-    _streamIndex = 0;
+    UInt64 total = 0;
+    FOR_VECTOR (i, Streams)
+    {
+      CSubStreamInfo &s = Streams[i];
+      s.GlobalOffset = total;
+      total += Streams[i].Size;
+      RINOK(s.Stream->Seek(0, STREAM_SEEK_CUR, &s.LocalPos));
+    }
+    _totalLength = total;
     _pos = 0;
-    _seekPos = 0;
-    _totalLength = 0;
-    for (int i = 0; i < Streams.Size(); i++)
-      _totalLength += Streams[i].Size;
+    _streamIndex = 0;
+    return S_OK;
   }
 
   MY_UNKNOWN_IMP1(IInStream)
@@ -44,7 +57,7 @@ class COutMultiStream:
   public IOutStream,
   public CMyUnknownImp
 {
-  int _streamIndex; // required stream
+  unsigned _streamIndex; // required stream
   UInt64 _offsetPos; // offset from start of _streamIndex index
   UInt64 _absPos;
   UInt64 _length;

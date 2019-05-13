@@ -6,11 +6,10 @@
 #include "Windows/Window.h"
 
 #ifndef _WIN32
-#define SW_HIDE             0
-#define SW_SHOW             5
 
 #define WM_SETTEXT (6000) // wxID_HIGHEST + 1
 #define WM_USER    (6999) // wxID_HIGHEST + 1000
+#define WM_APP     (26999) // wxID_HIGHEST + 22000
 
 #endif
 
@@ -18,19 +17,11 @@
 #define CBN_SELCHANGE       1
 #endif
 
-// FIXME
-#define IDOK      (5100) // wxID_OK
-#define IDCANCEL  (5101) // wxID_CANCEL
-#define IDABORT   (5115) // wxID_ABORT
-#define IDYES     (5103) // wxID_YES
-#define IDNO      (5104) // wxID_NO
-#define IDHELP    (5009) // wxID_HELP
-
 #define BST_CHECKED 1
 #define BST_UNCHECKED 0
 // #define BST_INDETERMINATE  0x0002
 
-#define wsprintf(a,b,c,d,e) swprintf(a,9999,b,c,d,e)  // FIXME
+// FIXME #define wsprintf(a,b,c,d,e) swprintf(a,9999,b,c,d,e)  // FIXME
 
 namespace NWindows {
 	namespace NControl {
@@ -56,6 +47,9 @@ namespace NWindows {
 			virtual bool OnMessage(UINT message, WPARAM wParam, LPARAM lParam) { return false; }
 			virtual bool OnCommand(int code, int itemID, LPARAM lParam) { return false; }
 			virtual bool OnTimer(WPARAM /* timerID */, LPARAM /* callback */) { return false; }
+
+			void NormalizeSize(bool fullNormalize = false)  { /* FIXME */ }
+			void NormalizePosition() { /* FIXME */ }
 		};
 
 		class CModalDialog : public CDialog
@@ -99,6 +93,11 @@ namespace NWindows {
 
 			void ShowItem(int itemID, int cmdShow) const;
 
+			void ShowItem_Bool(int itemID, bool show) const { ShowItem(itemID, show ? SW_SHOW: SW_HIDE); }
+
+
+			void HideItem(int itemID) const { ShowItem(itemID, SW_HIDE); }
+
 			void End(int result);
 
 			void SetText(const TCHAR *_title); // {  _dialog->SetTitle(_title); }
@@ -107,7 +106,7 @@ namespace NWindows {
 
 			INT_PTR Create(int id , HWND parentWindow);
 
-			void PostMessage(UINT message);
+			void PostMsg(UINT message);
 
 			virtual void OnHelp() {}
 
@@ -139,7 +138,7 @@ public:
 
 struct CStringTable
 {
-	int id;
+	unsigned int id;
 	const wchar_t *str;
 };
 

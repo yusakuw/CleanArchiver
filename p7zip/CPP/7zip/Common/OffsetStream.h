@@ -1,9 +1,10 @@
 // OffsetStream.h
 
-#ifndef __OFFSETSTREAM_H
-#define __OFFSETSTREAM_H
+#ifndef __OFFSET_STREAM_H
+#define __OFFSET_STREAM_H
 
-#include "Common/MyCom.h"
+#include "../../Common/MyCom.h"
+
 #include "../IStream.h"
 
 class COffsetOutStream:
@@ -19,7 +20,7 @@ public:
 
   STDMETHOD(Write)(const void *data, UInt32 size, UInt32 *processedSize);
   STDMETHOD(Seek)(Int64 offset, UInt32 seekOrigin, UInt64 *newPosition);
-  STDMETHOD(SetSize)(Int64 newSize);
+  STDMETHOD(SetSize)(UInt64 newSize);
 };
 
 #endif

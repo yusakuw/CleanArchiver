@@ -1,7 +1,7 @@
 /* HuffEnc.c -- functions for Huffman encoding
-2008-08-05
-Igor Pavlov
-Public domain */
+2016-05-16 : Igor Pavlov : Public domain */
+
+#include "Precomp.h"
 
 #include "HuffEnc.h"
 #include "Sort.h"
@@ -67,11 +67,11 @@ void Huffman_Generate(const UInt32 *freqs, UInt32 *p, Byte *lens, UInt32 numSymb
 
   if (num < 2)
   {
-    int minCode = 0;
-    int maxCode = 1;
+    unsigned minCode = 0;
+    unsigned maxCode = 1;
     if (num == 1)
     {
-      maxCode = (int)(p[0] & MASK);
+      maxCode = (unsigned)p[0] & MASK;
       if (maxCode == 0)
         maxCode++;
     }
@@ -121,8 +121,8 @@ void Huffman_Generate(const UInt32 *freqs, UInt32 *p, Byte *lens, UInt32 numSymb
         i = 0;
         for (len = maxLen; len != 0; len--)
         {
-          UInt32 num;
-          for (num = lenCounters[len]; num != 0; num--)
+          UInt32 k;
+          for (k = lenCounters[len]; k != 0; k--)
             lens[p[i++] & MASK] = (Byte)len;
         }
       }
@@ -138,9 +138,9 @@ void Huffman_Generate(const UInt32 *freqs, UInt32 *p, Byte *lens, UInt32 numSymb
         /* if (code + lenCounters[kMaxLen] - 1 != (1 << kMaxLen) - 1) throw 1; */
 
         {
-          UInt32 i;
-          for (i = 0; i < numSymbols; i++)
-            p[i] = nextCodes[lens[i]]++;
+          UInt32 k;
+          for (k = 0; k < numSymbols; k++)
+            p[k] = nextCodes[lens[k]]++;
         }
       }
     }

@@ -3,7 +3,7 @@
 #ifndef __CRYPTO_ZIP_CRYPTO_H
 #define __CRYPTO_ZIP_CRYPTO_H
 
-#include "Common/MyCom.h"
+#include "../../Common/MyCom.h"
 
 #include "../ICoder.h"
 #include "../IPassword.h"
@@ -13,58 +13,60 @@ namespace NZip {
 
 const unsigned kHeaderSize = 12;
 
-class CCipher
-{
-  UInt32 Keys[3];
+/* ICompressFilter::Init() does nothing for this filter.
+  Call to init:
+    Encoder:
+      CryptoSetPassword();
+      WriteHeader();
+    Decoder:
+      [CryptoSetPassword();]
+      ReadHeader();
+      [CryptoSetPassword();] Init_and_GetCrcByte();
+      [CryptoSetPassword();] Init_and_GetCrcByte();
+*/
 
-  void UpdateKeys(Byte b);
-  Byte DecryptByteSpec();
-public:
-  void SetPassword(const Byte *password, UInt32 passwordLen);
-  Byte DecryptByte(Byte b);
-  Byte EncryptByte(Byte b);
-  void DecryptHeader(Byte *buf);
-  void EncryptHeader(Byte *buf);
-};
-
-class CEncoder :
-  public ICompressFilter,
-  public ICryptoSetPassword,
-  public ICryptoSetCRC,
-  public CMyUnknownImp
-{
-  CCipher _cipher;
-  UInt32 _crc;
-public:
-  MY_UNKNOWN_IMP2(
-      ICryptoSetPassword,
-      ICryptoSetCRC
-  )
-  STDMETHOD(Init)();
-  STDMETHOD_(UInt32, Filter)(Byte *data, UInt32 size);
-
-  STDMETHOD(CryptoSetPassword)(const Byte *data, UInt32 size);
-  STDMETHOD(CryptoSetCRC)(UInt32 crc);
-  HRESULT WriteHeader(ISequentialOutStream *outStream);
-};
-
-
-class CDecoder:
+class CCipher:
   public ICompressFilter,
   public ICryptoSetPassword,
   public CMyUnknownImp
 {
-  CCipher _cipher;
+protected:
+  UInt32 Key0;
+  UInt32 Key1;
+  UInt32 Key2;
+  
+  UInt32 KeyMem0;
+  UInt32 KeyMem1;
+  UInt32 KeyMem2;
+
+  void RestoreKeys()
+  {
+    Key0 = KeyMem0;
+    Key1 = KeyMem1;
+    Key2 = KeyMem2;
+  }
+
 public:
   MY_UNKNOWN_IMP1(ICryptoSetPassword)
-
   STDMETHOD(Init)();
-  STDMETHOD_(UInt32, Filter)(Byte *data, UInt32 size);
   STDMETHOD(CryptoSetPassword)(const Byte *data, UInt32 size);
-
-  HRESULT ReadHeader(ISequentialInStream *inStream);
 };
 
+class CEncoder: public CCipher
+{
+public:
+  STDMETHOD_(UInt32, Filter)(Byte *data, UInt32 size);
+  HRESULT WriteHeader_Check16(ISequentialOutStream *outStream, UInt16 crc);
+};
+
+class CDecoder: public CCipher
+{
+public:
+  Byte _header[kHeaderSize];
+  STDMETHOD_(UInt32, Filter)(Byte *data, UInt32 size);
+  HRESULT ReadHeader(ISequentialInStream *inStream);
+  void Init_BeforeDecode();
+};
 
 }}
 

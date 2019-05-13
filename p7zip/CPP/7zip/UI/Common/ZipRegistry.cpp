@@ -2,142 +2,170 @@
 
 #include "StdAfx.h"
 
+#include "../../../Common/IntToString.h"
+
+#include "../../../Windows/FileDir.h"
+#include "../../../Windows/Registry.h"
+#include "../../../Windows/Synchronization.h"
+
 #include "ZipRegistry.h"
-
-#include "Common/IntToString.h"
-#include "Common/StringConvert.h"
-
-#include "Windows/Synchronization.h"
-#include "Windows/Registry.h"
-
-#include "Windows/FileDir.h"
 
 using namespace NWindows;
 using namespace NRegistry;
 
-static const TCHAR *kCUBasePath = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("7-ZIP");
+static NSynchronization::CCriticalSection g_CS;
+#define CS_LOCK NSynchronization::CCriticalSectionLock lock(g_CS);
 
-static NSynchronization::CCriticalSection g_RegistryOperationsCriticalSection;
+static const TCHAR *kCuPrefix = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("7-Zip") TEXT(STRING_PATH_SEPARATOR);
 
-//////////////////////
-// ExtractionInfo
+static CSysString GetKeyPath(const CSysString &path) { return kCuPrefix + path; }
 
-static const TCHAR *kExtractionKeyName = TEXT("Extraction");
-
-static const TCHAR *kExtractionPathHistoryKeyName = TEXT("PathHistory");
-static const TCHAR *kExtractionExtractModeValueName = TEXT("ExtarctMode");
-static const TCHAR *kExtractionOverwriteModeValueName = TEXT("OverwriteMode");
-static const TCHAR *kExtractionShowPasswordValueName = TEXT("ShowPassword");
-
-static CSysString GetKeyPath(const CSysString &path)
+static LONG OpenMainKey(CKey &key, LPCTSTR keyName)
 {
-  return CSysString(kCUBasePath) + CSysString(CHAR_PATH_SEPARATOR) + path;
+  return key.Open(HKEY_CURRENT_USER, GetKeyPath(keyName), KEY_READ);
 }
 
-void SaveExtractionInfo(const NExtract::CInfo &info)
+static LONG CreateMainKey(CKey &key, LPCTSTR keyName)
 {
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey extractionKey;
-  extractionKey.Create(HKEY_CURRENT_USER, GetKeyPath(kExtractionKeyName));
-  extractionKey.RecurseDeleteKey(kExtractionPathHistoryKeyName);
-  {
-    CKey pathHistoryKey;
-    pathHistoryKey.Create(extractionKey, kExtractionPathHistoryKeyName);
-    for(int i = 0; i < info.Paths.Size(); i++)
-    {
-      wchar_t numberString[16];
-      ConvertUInt32ToString(i, numberString);
-      pathHistoryKey.SetValue(numberString, info.Paths[i]);
-    }
-  }
-  extractionKey.SetValue(kExtractionExtractModeValueName, UInt32(info.PathMode));
-  extractionKey.SetValue(kExtractionOverwriteModeValueName, UInt32(info.OverwriteMode));
-  extractionKey.SetValue(kExtractionShowPasswordValueName, info.ShowPassword);
+  return key.Create(HKEY_CURRENT_USER, GetKeyPath(keyName));
 }
 
-void ReadExtractionInfo(NExtract::CInfo &info)
+static void Key_Set_BoolPair(CKey &key, LPCTSTR name, const CBoolPair &b)
 {
-  info.Paths.Clear();
-  info.PathMode = NExtract::NPathMode::kCurrentPathnames;
-  info.OverwriteMode = NExtract::NOverwriteMode::kAskBefore;
-  info.ShowPassword = false;
+  if (b.Def)
+    key.SetValue(name, b.Val);
+}
 
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey extractionKey;
-  if(extractionKey.Open(HKEY_CURRENT_USER, GetKeyPath(kExtractionKeyName), KEY_READ) != ERROR_SUCCESS)
+static void Key_Get_BoolPair(CKey &key, LPCTSTR name, CBoolPair &b)
+{
+  b.Val = false;
+  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+}
+
+static void Key_Get_BoolPair_true(CKey &key, LPCTSTR name, CBoolPair &b)
+{
+  b.Val = true;
+  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+}
+
+namespace NExtract
+{
+
+static const TCHAR *kKeyName = TEXT("Extraction");
+
+static const TCHAR *kExtractMode = TEXT("ExtractMode");
+static const TCHAR *kOverwriteMode = TEXT("OverwriteMode");
+static const TCHAR *kShowPassword = TEXT("ShowPassword");
+static const TCHAR *kPathHistory = TEXT("PathHistory");
+static const TCHAR *kSplitDest = TEXT("SplitDest");
+static const TCHAR *kElimDup = TEXT("ElimDup");
+// static const TCHAR *kAltStreams = TEXT("AltStreams");
+static const TCHAR *kNtSecur = TEXT("Security");
+
+void CInfo::Save() const
+{
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kKeyName);
+
+  if (PathMode_Force)
+    key.SetValue(kExtractMode, (UInt32)PathMode);
+  if (OverwriteMode_Force)
+    key.SetValue(kOverwriteMode, (UInt32)OverwriteMode);
+
+  Key_Set_BoolPair(key, kSplitDest, SplitDest);
+  Key_Set_BoolPair(key, kElimDup, ElimDup);
+  // Key_Set_BoolPair(key, kAltStreams, AltStreams);
+  Key_Set_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Set_BoolPair(key, kShowPassword, ShowPassword);
+
+  key.RecurseDeleteKey(kPathHistory);
+  key.SetValue_Strings(kPathHistory, Paths);
+}
+
+void Save_ShowPassword(bool showPassword)
+{
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kKeyName);
+  key.SetValue(kShowPassword, showPassword);
+}
+
+void CInfo::Load()
+{
+  PathMode = NPathMode::kCurPaths;
+  PathMode_Force = false;
+  OverwriteMode = NOverwriteMode::kAsk;
+  OverwriteMode_Force = false;
+  
+  SplitDest.Val = true;
+
+  Paths.Clear();
+
+  CS_LOCK
+  CKey key;
+  if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
     return;
   
+  key.GetValue_Strings(kPathHistory, Paths);
+  UInt32 v;
+  if (key.QueryValue(kExtractMode, v) == ERROR_SUCCESS && v <= NPathMode::kAbsPaths)
   {
-    CKey pathHistoryKey;
-    if(pathHistoryKey.Open(extractionKey, kExtractionPathHistoryKeyName, KEY_READ) ==
-        ERROR_SUCCESS)
-    {
-      for (;;)
-      {
-        wchar_t numberString[16];
-        ConvertUInt32ToString(info.Paths.Size(), numberString);
-        UString path;
-        if (pathHistoryKey.QueryValue(numberString, path) != ERROR_SUCCESS)
-          break;
-        info.Paths.Add(path);
-      }
-    }
+    PathMode = (NPathMode::EEnum)v;
+    PathMode_Force = true;
   }
-  UInt32 extractModeIndex;
-  if (extractionKey.QueryValue(kExtractionExtractModeValueName, extractModeIndex) == ERROR_SUCCESS)
+  if (key.QueryValue(kOverwriteMode, v) == ERROR_SUCCESS && v <= NOverwriteMode::kRenameExisting)
   {
-    switch (extractModeIndex)
-    {
-      case NExtract::NPathMode::kFullPathnames:
-      case NExtract::NPathMode::kCurrentPathnames:
-      case NExtract::NPathMode::kNoPathnames:
-        info.PathMode = NExtract::NPathMode::EEnum(extractModeIndex);
-        break;
-    }
+    OverwriteMode = (NOverwriteMode::EEnum)v;
+    OverwriteMode_Force = true;
   }
-  UInt32 overwriteModeIndex;
-  if (extractionKey.QueryValue(kExtractionOverwriteModeValueName, overwriteModeIndex) == ERROR_SUCCESS)
-  {
-    switch (overwriteModeIndex)
-    {
-      case NExtract::NOverwriteMode::kAskBefore:
-      case NExtract::NOverwriteMode::kWithoutPrompt:
-      case NExtract::NOverwriteMode::kSkipExisting:
-      case NExtract::NOverwriteMode::kAutoRename:
-      case NExtract::NOverwriteMode::kAutoRenameExisting:
-        info.OverwriteMode = NExtract::NOverwriteMode::EEnum(overwriteModeIndex);
-        break;
-    }
-  }
-  if (extractionKey.QueryValue(kExtractionShowPasswordValueName,
-      info.ShowPassword) != ERROR_SUCCESS)
-    info.ShowPassword = false;
+
+  Key_Get_BoolPair_true(key, kSplitDest, SplitDest);
+
+  Key_Get_BoolPair(key, kElimDup, ElimDup);
+  // Key_Get_BoolPair(key, kAltStreams, AltStreams);
+  Key_Get_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Get_BoolPair(key, kShowPassword, ShowPassword);
 }
 
-///////////////////////////////////
-// CompressionInfo
+bool Read_ShowPassword()
+{
+  CS_LOCK
+  CKey key;
+  bool showPassword = false;
+  if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
+    return showPassword;
+  key.GetValue_IfOk(kShowPassword, showPassword);
+  return showPassword;
+}
 
-static const TCHAR *kCompressionKeyName = TEXT("Compression");
+}
 
-static const TCHAR *kCompressionHistoryArchivesKeyName = TEXT("ArcHistory");
-static const TCHAR *kCompressionLevelValueName = TEXT("Level");
-static const TCHAR *kCompressionLastFormatValueName = TEXT("Archiver");
-static const TCHAR *kCompressionShowPasswordValueName = TEXT("ShowPassword");
-static const TCHAR *kCompressionEncryptHeadersValueName = TEXT("EncryptHeaders");
+namespace NCompression
+{
 
-static const TCHAR *kCompressionOptionsKeyName = TEXT("Options");
-// static const TCHAR *kSolid = TEXT("Solid");
-// static const TCHAR *kMultiThread = TEXT("Multithread");
+static const TCHAR *kKeyName = TEXT("Compression");
 
-static const WCHAR *kCompressionOptions = L"Options";
-static const TCHAR *kCompressionLevel = TEXT("Level");
-static const WCHAR *kCompressionMethod = L"Method";
+static const TCHAR *kArcHistory = TEXT("ArcHistory");
+static const WCHAR *kArchiver = L"Archiver";
+static const TCHAR *kShowPassword = TEXT("ShowPassword");
+static const TCHAR *kEncryptHeaders = TEXT("EncryptHeaders");
+
+static const TCHAR *kOptionsKeyName = TEXT("Options");
+
+static const TCHAR *kLevel = TEXT("Level");
+static const TCHAR *kDictionary = TEXT("Dictionary");
+static const TCHAR *kOrder = TEXT("Order");
+static const TCHAR *kBlockSize = TEXT("BlockSize");
+static const TCHAR *kNumThreads = TEXT("NumThreads");
+static const WCHAR *kMethod = L"Method";
+static const WCHAR *kOptions = L"Options";
 static const WCHAR *kEncryptionMethod = L"EncryptionMethod";
-static const TCHAR *kCompressionDictionary = TEXT("Dictionary");
-static const TCHAR *kCompressionOrder = TEXT("Order");
-static const TCHAR *kCompressionNumThreads = TEXT("NumThreads");
-static const TCHAR *kCompressionBlockSize = TEXT("BlockSize");
 
+static const TCHAR *kNtSecur = TEXT("Security");
+static const TCHAR *kAltStreams = TEXT("AltStreams");
+static const TCHAR *kHardLinks = TEXT("HardLinks");
+static const TCHAR *kSymLinks = TEXT("SymLinks");
 
 static void SetRegString(CKey &key, const WCHAR *name, const UString &value)
 {
@@ -149,7 +177,7 @@ static void SetRegString(CKey &key, const WCHAR *name, const UString &value)
 
 static void SetRegUInt32(CKey &key, const TCHAR *name, UInt32 value)
 {
-  if (value == (UInt32)-1)
+  if (value == (UInt32)(Int32)-1)
     key.DeleteValue(name);
   else
     key.SetValue(name, value);
@@ -164,254 +192,208 @@ static void GetRegString(CKey &key, const WCHAR *name, UString &value)
 static void GetRegUInt32(CKey &key, const TCHAR *name, UInt32 &value)
 {
   if (key.QueryValue(name, value) != ERROR_SUCCESS)
-    value = UInt32(-1);
+    value = (UInt32)(Int32)-1;
 }
 
-void SaveCompressionInfo(const NCompression::CInfo &info)
+void CInfo::Save() const
 {
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
+  CS_LOCK
 
-  CKey compressionKey;
-  compressionKey.Create(HKEY_CURRENT_USER, GetKeyPath(kCompressionKeyName));
-  compressionKey.RecurseDeleteKey(kCompressionHistoryArchivesKeyName);
-  {
-    CKey historyArchivesKey;
-    historyArchivesKey.Create(compressionKey, kCompressionHistoryArchivesKeyName);
-    for(int i = 0; i < info.HistoryArchives.Size(); i++)
-    {
-      wchar_t numberString[16];
-      ConvertUInt32ToString(i, numberString);
-      historyArchivesKey.SetValue(numberString, info.HistoryArchives[i]);
-    }
-  }
+  CKey key;
+  CreateMainKey(key, kKeyName);
 
-  // compressionKey.SetValue(kSolid, info.Solid);
-  // compressionKey.SetValue(kMultiThread, info.MultiThread);
-  compressionKey.RecurseDeleteKey(kCompressionOptionsKeyName);
+  Key_Set_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Set_BoolPair(key, kAltStreams, AltStreams);
+  Key_Set_BoolPair(key, kHardLinks, HardLinks);
+  Key_Set_BoolPair(key, kSymLinks, SymLinks);
+  
+  key.SetValue(kShowPassword, ShowPassword);
+  key.SetValue(kLevel, (UInt32)Level);
+  key.SetValue(kArchiver, ArcType);
+  key.SetValue(kShowPassword, ShowPassword);
+  key.SetValue(kEncryptHeaders, EncryptHeaders);
+  key.RecurseDeleteKey(kArcHistory);
+  key.SetValue_Strings(kArcHistory, ArcPaths);
+
+  key.RecurseDeleteKey(kOptionsKeyName);
   {
     CKey optionsKey;
-    optionsKey.Create(compressionKey, kCompressionOptionsKeyName);
-    for(int i = 0; i < info.FormatOptionsVector.Size(); i++)
+    optionsKey.Create(key, kOptionsKeyName);
+    FOR_VECTOR (i, Formats)
     {
-      const NCompression::CFormatOptions &fo = info.FormatOptionsVector[i];
-      CKey formatKey;
-      formatKey.Create(optionsKey, fo.FormatID);
+      const CFormatOptions &fo = Formats[i];
+      CKey fk;
+      fk.Create(optionsKey, fo.FormatID);
       
-      SetRegString(formatKey, kCompressionOptions, fo.Options);
-      SetRegString(formatKey, kCompressionMethod, fo.Method);
-      SetRegString(formatKey, kEncryptionMethod, fo.EncryptionMethod);
+      SetRegUInt32(fk, kLevel, fo.Level);
+      SetRegUInt32(fk, kDictionary, fo.Dictionary);
+      SetRegUInt32(fk, kOrder, fo.Order);
+      SetRegUInt32(fk, kBlockSize, fo.BlockLogSize);
+      SetRegUInt32(fk, kNumThreads, fo.NumThreads);
 
-      SetRegUInt32(formatKey, kCompressionLevel, fo.Level);
-      SetRegUInt32(formatKey, kCompressionDictionary, fo.Dictionary);
-      SetRegUInt32(formatKey, kCompressionOrder, fo.Order);
-      SetRegUInt32(formatKey, kCompressionBlockSize, fo.BlockLogSize);
-      SetRegUInt32(formatKey, kCompressionNumThreads, fo.NumThreads);
+      SetRegString(fk, kMethod, fo.Method);
+      SetRegString(fk, kOptions, fo.Options);
+      SetRegString(fk, kEncryptionMethod, fo.EncryptionMethod);
     }
   }
-
-  compressionKey.SetValue(kCompressionLevelValueName, UInt32(info.Level));
-  compressionKey.SetValue(kCompressionLastFormatValueName, GetSystemString(info.ArchiveType));
-
-  compressionKey.SetValue(kCompressionShowPasswordValueName, info.ShowPassword);
-  compressionKey.SetValue(kCompressionEncryptHeadersValueName, info.EncryptHeaders);
-  // compressionKey.SetValue(kCompressionMaximizeValueName, info.Maximize);
 }
 
-void ReadCompressionInfo(NCompression::CInfo &info)
+void CInfo::Load()
 {
-  info.HistoryArchives.Clear();
+  ArcPaths.Clear();
+  Formats.Clear();
 
-  // info.Solid = true;
-  // info.MultiThread = IsMultiProcessor();
-  info.FormatOptionsVector.Clear();
+  Level = 5;
+  ArcType = L"7z";
+  ShowPassword = false;
+  EncryptHeaders = false;
 
-  info.Level = 5;
-  info.ArchiveType = L"7z";
-  // definedStatus.Maximize = false;
-  info.ShowPassword = false;
-  info.EncryptHeaders = false;
+  CS_LOCK
+  CKey key;
 
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey compressionKey;
-
-  if(compressionKey.Open(HKEY_CURRENT_USER,
-      GetKeyPath(kCompressionKeyName), KEY_READ) != ERROR_SUCCESS)
+  if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
     return;
-  
-  {
-    CKey historyArchivesKey;
-    if(historyArchivesKey.Open(compressionKey, kCompressionHistoryArchivesKeyName, KEY_READ) ==
-        ERROR_SUCCESS)
-    {
-      for (;;)
-      {
-        wchar_t numberString[16];
-        ConvertUInt32ToString(info.HistoryArchives.Size(), numberString);
-        UString path;
-        if (historyArchivesKey.QueryValue(numberString, path) != ERROR_SUCCESS)
-          break;
-        info.HistoryArchives.Add(path);
-      }
-    }
-  }
 
-  
-  /*
-  bool solid = false;
-  if (compressionKey.QueryValue(kSolid, solid) == ERROR_SUCCESS)
-    info.Solid = solid;
-  bool multiThread = false;
-  if (compressionKey.QueryValue(kMultiThread, multiThread) == ERROR_SUCCESS)
-    info.MultiThread = multiThread;
-  */
+  Key_Get_BoolPair(key, kNtSecur, NtSecurity);
+  Key_Get_BoolPair(key, kAltStreams, AltStreams);
+  Key_Get_BoolPair(key, kHardLinks, HardLinks);
+  Key_Get_BoolPair(key, kSymLinks, SymLinks);
 
+  key.GetValue_Strings(kArcHistory, ArcPaths);
+  
   {
     CKey optionsKey;
-    if(optionsKey.Open(compressionKey, kCompressionOptionsKeyName, KEY_READ) ==
-        ERROR_SUCCESS)
+    if (optionsKey.Open(key, kOptionsKeyName, KEY_READ) == ERROR_SUCCESS)
     {
       CSysStringVector formatIDs;
       optionsKey.EnumKeys(formatIDs);
-      for(int i = 0; i < formatIDs.Size(); i++)
+      FOR_VECTOR (i, formatIDs)
       {
-        CKey formatKey;
-        NCompression::CFormatOptions fo;
+        CKey fk;
+        CFormatOptions fo;
         fo.FormatID = formatIDs[i];
-        if(formatKey.Open(optionsKey, fo.FormatID, KEY_READ) == ERROR_SUCCESS)
+        if (fk.Open(optionsKey, fo.FormatID, KEY_READ) == ERROR_SUCCESS)
         {
-          GetRegString(formatKey, kCompressionOptions, fo.Options);
-          GetRegString(formatKey, kCompressionMethod, fo.Method);
-          GetRegString(formatKey, kEncryptionMethod, fo.EncryptionMethod);
+          GetRegString(fk, kOptions, fo.Options);
+          GetRegString(fk, kMethod, fo.Method);
+          GetRegString(fk, kEncryptionMethod, fo.EncryptionMethod);
 
-          GetRegUInt32(formatKey, kCompressionLevel, fo.Level);
-          GetRegUInt32(formatKey, kCompressionDictionary, fo.Dictionary);
-          GetRegUInt32(formatKey, kCompressionOrder, fo.Order);
-          GetRegUInt32(formatKey, kCompressionBlockSize, fo.BlockLogSize);
-          GetRegUInt32(formatKey, kCompressionNumThreads, fo.NumThreads);
+          GetRegUInt32(fk, kLevel, fo.Level);
+          GetRegUInt32(fk, kDictionary, fo.Dictionary);
+          GetRegUInt32(fk, kOrder, fo.Order);
+          GetRegUInt32(fk, kBlockSize, fo.BlockLogSize);
+          GetRegUInt32(fk, kNumThreads, fo.NumThreads);
 
-          info.FormatOptionsVector.Add(fo);
+          Formats.Add(fo);
         }
-
       }
     }
   }
 
-  UInt32 level;
-  if (compressionKey.QueryValue(kCompressionLevelValueName, level) == ERROR_SUCCESS)
-    info.Level = level;
-  CSysString archiveType;
-  if (compressionKey.QueryValue(kCompressionLastFormatValueName, archiveType) == ERROR_SUCCESS)
-    info.ArchiveType = GetUnicodeString(archiveType);
-  if (compressionKey.QueryValue(kCompressionShowPasswordValueName,
-      info.ShowPassword) != ERROR_SUCCESS)
-    info.ShowPassword = false;
-  if (compressionKey.QueryValue(kCompressionEncryptHeadersValueName,
-      info.EncryptHeaders) != ERROR_SUCCESS)
-    info.EncryptHeaders = false;
-  /*
-  if (compressionKey.QueryValue(kCompressionLevelValueName, info.Maximize) == ERROR_SUCCESS)
-    definedStatus.Maximize = true;
-  */
+  UString a;
+  if (key.QueryValue(kArchiver, a) == ERROR_SUCCESS)
+    ArcType = a;
+  key.GetValue_IfOk(kLevel, Level);
+  key.GetValue_IfOk(kShowPassword, ShowPassword);
+  key.GetValue_IfOk(kEncryptHeaders, EncryptHeaders);
 }
 
-
-///////////////////////////////////
-// WorkDirInfo
+}
 
 static const TCHAR *kOptionsInfoKeyName = TEXT("Options");
 
-static const TCHAR *kWorkDirTypeValueName = TEXT("WorkDirType");
-static const WCHAR *kWorkDirPathValueName = L"WorkDirPath";
-static const TCHAR *kTempRemovableOnlyValueName = TEXT("TempRemovableOnly");
-static const TCHAR *kCascadedMenuValueName = TEXT("CascadedMenu");
-static const TCHAR *kContextMenuValueName = TEXT("ContextMenu");
-
-void SaveWorkDirInfo(const NWorkDir::CInfo &info)
+namespace NWorkDir
 {
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  optionsKey.Create(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName));
-  optionsKey.SetValue(kWorkDirTypeValueName, UInt32(info.Mode));
-  optionsKey.SetValue(kWorkDirPathValueName, info.Path);
-  optionsKey.SetValue(kTempRemovableOnlyValueName, info.ForRemovableOnly);
+static const TCHAR *kWorkDirType = TEXT("WorkDirType");
+static const WCHAR *kWorkDirPath = L"WorkDirPath";
+static const TCHAR *kTempRemovableOnly = TEXT("TempRemovableOnly");
+
+
+void CInfo::Save()const
+{
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kOptionsInfoKeyName);
+  key.SetValue(kWorkDirType, (UInt32)Mode);
+  key.SetValue(kWorkDirPath, fs2us(Path));
+  key.SetValue(kTempRemovableOnly, ForRemovableOnly);
 }
 
-void ReadWorkDirInfo(NWorkDir::CInfo &info)
+void CInfo::Load()
 {
-  info.SetDefault();
+  SetDefault();
 
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  if(optionsKey.Open(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName), KEY_READ) != ERROR_SUCCESS)
+  CS_LOCK
+  CKey key;
+  if (OpenMainKey(key, kOptionsInfoKeyName) != ERROR_SUCCESS)
     return;
 
   UInt32 dirType;
-  if (optionsKey.QueryValue(kWorkDirTypeValueName, dirType) != ERROR_SUCCESS)
+  if (key.QueryValue(kWorkDirType, dirType) != ERROR_SUCCESS)
     return;
   switch (dirType)
   {
-    case NWorkDir::NMode::kSystem:
-    case NWorkDir::NMode::kCurrent:
-    case NWorkDir::NMode::kSpecified:
-      info.Mode = NWorkDir::NMode::EEnum(dirType);
+    case NMode::kSystem:
+    case NMode::kCurrent:
+    case NMode::kSpecified:
+      Mode = (NMode::EEnum)dirType;
   }
-  UString sysWorkDir;
-  if (optionsKey.QueryValue(kWorkDirPathValueName, sysWorkDir) != ERROR_SUCCESS)
+  UString pathU;
+  if (key.QueryValue(kWorkDirPath, pathU) == ERROR_SUCCESS)
+    Path = us2fs(pathU);
+  else
   {
-    info.Path.Empty();
-    if (info.Mode == NWorkDir::NMode::kSpecified)
-      info.Mode = NWorkDir::NMode::kSystem;
+    Path.Empty();
+    if (Mode == NMode::kSpecified)
+      Mode = NMode::kSystem;
   }
-  info.Path = GetUnicodeString(sysWorkDir);
-  if (optionsKey.QueryValue(kTempRemovableOnlyValueName, info.ForRemovableOnly) != ERROR_SUCCESS)
-    info.SetForRemovableOnlyDefault();
+  key.GetValue_IfOk(kTempRemovableOnly, ForRemovableOnly);
 }
 
-static void SaveOption(const TCHAR *value, bool enabled)
+}
+
+static const TCHAR *kCascadedMenu = TEXT("CascadedMenu");
+static const TCHAR *kContextMenu = TEXT("ContextMenu");
+static const TCHAR *kMenuIcons = TEXT("MenuIcons");
+static const TCHAR *kElimDup = TEXT("ElimDupExtract");
+
+void CContextMenuInfo::Save() const
 {
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  optionsKey.Create(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName));
-  optionsKey.SetValue(value, enabled);
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kOptionsInfoKeyName);
+  
+  Key_Set_BoolPair(key, kCascadedMenu, Cascaded);
+  Key_Set_BoolPair(key, kMenuIcons, MenuIcons);
+  Key_Set_BoolPair(key, kElimDup, ElimDup);
+  
+  if (Flags_Def)
+    key.SetValue(kContextMenu, Flags);
 }
 
-static bool ReadOption(const TCHAR *value, bool defaultValue)
+void CContextMenuInfo::Load()
 {
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  if(optionsKey.Open(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName), KEY_READ) != ERROR_SUCCESS)
-    return defaultValue;
-  bool enabled;
-  if (optionsKey.QueryValue(value, enabled) != ERROR_SUCCESS)
-    return defaultValue;
-  return enabled;
+  Cascaded.Val = true;
+  Cascaded.Def = false;
+
+  MenuIcons.Val = false;
+  MenuIcons.Def = false;
+
+  ElimDup.Val = true;
+  ElimDup.Def = false;
+
+  Flags = (UInt32)(Int32)-1;
+  Flags_Def = false;
+  
+  CS_LOCK
+  
+  CKey key;
+  if (OpenMainKey(key, kOptionsInfoKeyName) != ERROR_SUCCESS)
+    return;
+  
+  Key_Get_BoolPair_true(key, kCascadedMenu, Cascaded);
+  Key_Get_BoolPair_true(key, kElimDup, ElimDup);
+  Key_Get_BoolPair(key, kMenuIcons, MenuIcons);
+
+  Flags_Def = (key.GetValue_IfOk(kContextMenu, Flags) == ERROR_SUCCESS);
 }
-
-void SaveCascadedMenu(bool show)
-  { SaveOption(kCascadedMenuValueName, show); }
-bool ReadCascadedMenu()
-  { return ReadOption(kCascadedMenuValueName, true); }
-
-
-static void SaveValue(const TCHAR *value, UInt32 valueToWrite)
-{
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  optionsKey.Create(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName));
-  optionsKey.SetValue(value, valueToWrite);
-}
-
-static bool ReadValue(const TCHAR *value, UInt32 &result)
-{
-  NSynchronization::CCriticalSectionLock lock(g_RegistryOperationsCriticalSection);
-  CKey optionsKey;
-  if(optionsKey.Open(HKEY_CURRENT_USER, GetKeyPath(kOptionsInfoKeyName), KEY_READ) != ERROR_SUCCESS)
-    return false;
-  return (optionsKey.QueryValue(value, result) == ERROR_SUCCESS);
-}
-
-void SaveContextMenuStatus(UInt32 value)
-  { SaveValue(kContextMenuValueName, value); }
-
-bool ReadContextMenuStatus(UInt32 &value)
-  { return  ReadValue(kContextMenuValueName, value); }

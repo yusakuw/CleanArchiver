@@ -40,15 +40,15 @@ STDMETHODIMP COutMemStream::Write(const void *data, UInt32 size, UInt32 *process
     return OutSeqStream->Write(data, size, processedSize);
   if (processedSize != 0)
     *processedSize = 0;
-  while(size != 0)
+  while (size != 0)
   {
-    if ((int)_curBlockIndex < Blocks.Blocks.Size())
+    if (_curBlockIndex < Blocks.Blocks.Size())
     {
-      Byte *p = (Byte *)Blocks.Blocks[(int)_curBlockIndex] + _curBlockPos;
+      Byte *p = (Byte *)Blocks.Blocks[_curBlockIndex] + _curBlockPos;
       size_t curSize = _memManager->GetBlockSize() - _curBlockPos;
       if (size < curSize)
         curSize = size;
-      memmove(p, data, curSize);
+      memcpy(p, data, curSize);
       if (processedSize != 0)
         *processedSize += (UInt32)curSize;
       data = (const void *)((const Byte *)data + curSize);
@@ -124,12 +124,12 @@ STDMETHODIMP COutMemStream::Seek(Int64 offset, UInt32 seekOrigin, UInt64 *newPos
   }
   else
     return E_NOTIMPL;
-  if (newPosition != 0)
+  if (newPosition)
     *newPosition = GetPos();
   return S_OK;
 }
 
-STDMETHODIMP COutMemStream::SetSize(Int64 newSize)
+STDMETHODIMP COutMemStream::SetSize(UInt64 newSize)
 {
   if (_realStreamMode)
   {

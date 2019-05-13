@@ -7,17 +7,7 @@
 
 #include <windows.h>
 
-#define CHAR_PATH_SEPARATOR '\\'
-#define WCHAR_PATH_SEPARATOR L'\\'
-#define STRING_PATH_SEPARATOR "\\"
-#define WSTRING_PATH_SEPARATOR L"\\"
-
 #else
-
-#define CHAR_PATH_SEPARATOR '/'
-#define WCHAR_PATH_SEPARATOR L'/'
-#define STRING_PATH_SEPARATOR "/"
-#define WSTRING_PATH_SEPARATOR L"/"
 
 #include <stddef.h> // for wchar_t
 #include <string.h>
@@ -54,6 +44,7 @@ typedef struct LARGE_INTEGER { LONGLONG QuadPart; }LARGE_INTEGER;
 typedef struct _ULARGE_INTEGER { ULONGLONG QuadPart;} ULARGE_INTEGER;
 
 typedef const CHAR *LPCSTR;
+
 typedef wchar_t WCHAR;
 
 #ifdef _UNICODE
@@ -67,6 +58,7 @@ typedef CHAR TCHAR;
 #define lstrcat strcat
 #define lstrlen strlen
 #endif
+#define _wcsicmp(str1,str2) MyStringCompareNoCase(str1,str2)
 
 typedef const TCHAR *LPCTSTR;
 typedef WCHAR OLECHAR;
@@ -198,12 +190,20 @@ typedef PROPVARIANT tagVARIANT;
 typedef tagVARIANT VARIANT;
 typedef VARIANT VARIANTARG;
 
+#define MY_EXTERN_C extern "C"
+
 MY_EXTERN_C HRESULT VariantClear(VARIANTARG *prop);
 MY_EXTERN_C HRESULT VariantCopy(VARIANTARG *dest, VARIANTARG *src);
+
+#else
+
+#define MY_EXTERN_C extern
+
 
 #endif
 
 MY_EXTERN_C BSTR SysAllocStringByteLen(LPCSTR psz, UINT len);
+MY_EXTERN_C BSTR SysAllocStringLen(const OLECHAR*,UINT);
 MY_EXTERN_C BSTR SysAllocString(const OLECHAR *sz);
 MY_EXTERN_C void SysFreeString(BSTR bstr);
 MY_EXTERN_C UINT SysStringByteLen(BSTR bstr);

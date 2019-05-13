@@ -18,13 +18,19 @@
 #include <sys/types.h>
 #include <utime.h>
 
-#ifdef HAVE_LSTAT
+#ifdef ENV_HAVE_LSTAT
 #define FD_LINK (-2)
 #endif
 
-#define FILE_SHARE_READ	1
 #define GENERIC_READ	0x80000000
 #define GENERIC_WRITE	0x40000000
+
+#ifdef ENV_HAVE_LSTAT
+extern "C"
+{
+int global_use_lstat=1; // default behaviour : p7zip stores symlinks instead of dumping the files they point to
+}
+#endif
 
 extern BOOLEAN WINAPI RtlTimeToSecondsSince1970( const LARGE_INTEGER *Time, DWORD *Seconds );
 
@@ -37,17 +43,21 @@ CFileBase::~CFileBase()
   Close();
 }
 
-bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
+bool CFileBase::Create(CFSTR filename, DWORD dwDesiredAccess,
     DWORD dwShareMode, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,bool ignoreSymbolicLink)
 {
   Close();
   
+  int   flags = 0;
+#ifdef USE_UNICODE_FSTRING
+   AString astr = UnicodeStringToMultiByte(filename);
+   const char * name = nameWindowToUnix((const char *)astr);
+#else
   const char * name = nameWindowToUnix(filename);
+#endif
 
 #ifdef O_BINARY
-  int   flags = O_BINARY;
-#else
-  int   flags = 0;
+  flags |= O_BINARY;
 #endif
 
 #ifdef O_LARGEFILE
@@ -74,7 +84,7 @@ bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
   // printf("##DBG open(%s,0x%x,%o)##\n",name,flags,(unsigned)mode);
 
   _fd = -1;
-#ifdef HAVE_LSTAT
+#ifdef ENV_HAVE_LSTAT
    if ((global_use_lstat) && (ignoreSymbolicLink == false))
    {
      _size = readlink(name, _buffer, sizeof(_buffer)-1);
@@ -100,7 +110,7 @@ bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
     UString ustr = MultiByteToUnicodeString(AString(name), 0);
     AString resultString;
     int is_good = 1;
-    for (int i = 0; i < ustr.Length(); i++)
+    for (int i = 0; i < ustr.Len(); i++)
     {
       if (ustr[i] >= 256) {
         is_good = 0;
@@ -115,7 +125,7 @@ bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
   }
 
   if (_fd == -1) {
-    /* !HAVE_LSTAT : an invalid symbolic link => errno == ENOENT */
+    /* !ENV_HAVE_LSTAT : an invalid symbolic link => errno == ENOENT */
     return false;
   } else {
     _unix_filename = name;
@@ -124,6 +134,7 @@ bool CFileBase::Create(LPCSTR filename, DWORD dwDesiredAccess,
   return true;
 }
 
+/* FIXME
 bool CFileBase::Create(LPCWSTR fileName, DWORD desiredAccess,
     DWORD shareMode, DWORD creationDisposition, DWORD flagsAndAttributes,bool ignoreSymbolicLink)
 {
@@ -131,6 +142,7 @@ bool CFileBase::Create(LPCWSTR fileName, DWORD desiredAccess,
     return Create(UnicodeStringToMultiByte(fileName, CP_ACP), 
       desiredAccess, shareMode, creationDisposition, flagsAndAttributes,ignoreSymbolicLink);
 }
+*/
 
 bool CFileBase::Close()
 {
@@ -144,7 +156,7 @@ bool CFileBase::Close()
   if(_fd == -1)
     return true;
 
-#ifdef HAVE_LSTAT
+#ifdef ENV_HAVE_LSTAT
   if(_fd == FD_LINK) {
     _fd = -1;
     return true;
@@ -182,7 +194,7 @@ bool CFileBase::GetLength(UINT64 &length) const
      return false;
   }
 
-#ifdef HAVE_LSTAT  
+#ifdef ENV_HAVE_LSTAT  
   if (_fd == FD_LINK) {
     length = _size;
     return true;
@@ -214,7 +226,7 @@ bool CFileBase::Seek(INT64 distanceToMove, DWORD moveMethod, UINT64 &newPosition
      return false;
   }
 
-#ifdef HAVE_LSTAT
+#ifdef ENV_HAVE_LSTAT
   if (_fd == FD_LINK) {
     INT64 offset;
     switch (moveMethod) {
@@ -256,32 +268,18 @@ bool CFileBase::Seek(UINT64 position, UINT64 &newPosition)
 /////////////////////////
 // CInFile
 
-bool CInFile::Open(LPCTSTR fileName, DWORD shareMode, 
+bool CInFile::Open(CFSTR fileName, DWORD shareMode, 
     DWORD creationDisposition,  DWORD flagsAndAttributes)
 {
   return Create(fileName, GENERIC_READ, shareMode, 
       creationDisposition, flagsAndAttributes);
 }
 
-bool CInFile::Open(LPCTSTR fileName,bool ignoreSymbolicLink)
+bool CInFile::Open(CFSTR fileName,bool ignoreSymbolicLink)
 {
   return Create(fileName, GENERIC_READ , FILE_SHARE_READ, OPEN_EXISTING, 
      FILE_ATTRIBUTE_NORMAL,ignoreSymbolicLink);
 }
-
-#ifndef _UNICODE
-bool CInFile::Open(LPCWSTR fileName, DWORD shareMode, 
-    DWORD creationDisposition,  DWORD flagsAndAttributes)
-{
-  return Create(fileName, GENERIC_READ, shareMode, 
-      creationDisposition, flagsAndAttributes);
-}
-
-bool CInFile::Open(LPCWSTR fileName,bool ignoreSymbolicLink)
-{
-  return Create(fileName, GENERIC_READ , FILE_SHARE_READ, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,ignoreSymbolicLink);
-}
-#endif
 
 // ReadFile and WriteFile functions in Windows have BUG:
 // If you Read or Write 64MB or more (probably min_failure_size = 64MB - 32KB + 1) 
@@ -310,7 +308,7 @@ bool CInFile::Read(void *buffer, UINT32 bytesToRead, UINT32 &bytesRead)
     return TRUE;
   }
 
-#ifdef HAVE_LSTAT
+#ifdef ENV_HAVE_LSTAT
   if (_fd == FD_LINK) {
     if (_offset >= _size) {
       bytesRead = 0;
@@ -341,7 +339,7 @@ bool CInFile::Read(void *buffer, UINT32 bytesToRead, UINT32 &bytesRead)
 /////////////////////////
 // COutFile
 
-bool COutFile::Open(LPCTSTR fileName, DWORD shareMode, 
+bool COutFile::Open(CFSTR fileName, DWORD shareMode, 
     DWORD creationDisposition, DWORD flagsAndAttributes)
 {
   return CFileBase::Create(fileName, GENERIC_WRITE, shareMode, 
@@ -351,40 +349,23 @@ bool COutFile::Open(LPCTSTR fileName, DWORD shareMode,
 static inline DWORD GetCreationDisposition(bool createAlways)
   {  return createAlways? CREATE_ALWAYS: CREATE_NEW; }
 
-bool COutFile::Open(LPCTSTR fileName, DWORD creationDisposition)
+bool COutFile::Open(CFSTR fileName, DWORD creationDisposition)
 {
   return Open(fileName, FILE_SHARE_READ, 
       creationDisposition, FILE_ATTRIBUTE_NORMAL);
 }
 
-bool COutFile::Create(LPCTSTR fileName, bool createAlways)
+bool COutFile::Create(CFSTR fileName, bool createAlways)
 {
   return Open(fileName, GetCreationDisposition(createAlways));
 }
 
-#ifndef _UNICODE
-
-bool COutFile::Open(LPCWSTR fileName, DWORD shareMode, 
-    DWORD creationDisposition, DWORD flagsAndAttributes)
+bool COutFile::CreateAlways(CFSTR fileName, DWORD /* flagsAndAttributes */ )
 {
-  return CFileBase::Create(fileName, GENERIC_WRITE, shareMode, 
-      creationDisposition, flagsAndAttributes);
+  return Open(fileName, true); // FIXME
 }
 
-bool COutFile::Open(LPCWSTR fileName, DWORD creationDisposition)
-{
-  return Open(fileName, FILE_SHARE_READ, 
-      creationDisposition, FILE_ATTRIBUTE_NORMAL);
-}
-
-bool COutFile::Create(LPCWSTR fileName, bool createAlways)
-{
-  return Open(fileName, GetCreationDisposition(createAlways));
-}
-
-#endif
-
-bool COutFile::SetTime(const FILETIME *cTime, const FILETIME *aTime, const FILETIME *mTime)
+bool COutFile::SetTime(const FILETIME *cTime, const FILETIME *aTime, const FILETIME *mTime) throw()
 {
   LARGE_INTEGER  ltime;
   DWORD dw;
@@ -411,12 +392,12 @@ bool COutFile::SetTime(const FILETIME *cTime, const FILETIME *aTime, const FILET
   return true;
 }
 
-bool COutFile::SetMTime(const FILETIME *mTime)
+bool COutFile::SetMTime(const FILETIME *mTime) throw()
 {
   return SetTime(NULL, NULL, mTime);
 }
 
-bool COutFile::WritePart(const void *data, UINT32 size, UINT32 &processedSize)
+bool COutFile::WritePart(const void *data, UINT32 size, UINT32 &processedSize) throw()
 {
 //  if (size > kChunkSizeMax)
 //    size = kChunkSizeMax;
@@ -424,7 +405,7 @@ bool COutFile::WritePart(const void *data, UINT32 size, UINT32 &processedSize)
   return Write(data,size,processedSize);
 }
 
-bool COutFile::Write(const void *buffer, UINT32 bytesToWrite, UINT32 &bytesWritten)
+bool COutFile::Write(const void *buffer, UINT32 bytesToWrite, UINT32 &bytesWritten) throw()
 {
   if (_fd == -1)
   {
@@ -445,7 +426,7 @@ bool COutFile::Write(const void *buffer, UINT32 bytesToWrite, UINT32 &bytesWritt
   return FALSE;
 }
 
-bool COutFile::SetEndOfFile()
+bool COutFile::SetEndOfFile() throw()
 {
   if (_fd == -1)
   {
@@ -464,7 +445,7 @@ bool COutFile::SetEndOfFile()
   return bret;
 }
 
-bool COutFile::SetLength(UINT64 length)
+bool COutFile::SetLength(UINT64 length) throw()
 {
   UINT64 newPosition;
   if(!Seek(length, newPosition))

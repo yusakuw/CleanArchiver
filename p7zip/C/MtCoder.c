@@ -1,7 +1,7 @@
 /* MtCoder.c -- Multi-thread Coder
-2009-03-26 : Igor Pavlov : Public domain */
+2015-10-13 : Igor Pavlov : Public domain */
 
-#include <stdio.h>
+#include "Precomp.h"
 
 #include "MtCoder.h"
 
@@ -118,7 +118,7 @@ void CMtThread_Construct(CMtThread *p, CMtCoder *mtCoder)
   LoopThread_Construct(&p->thread);
 }
 
-#define RINOK_THREAD(x) { if((x) != 0) return SZ_ERROR_THREAD; }
+#define RINOK_THREAD(x) { if ((x) != 0) return SZ_ERROR_THREAD; }
 
 static void CMtThread_CloseEvents(CMtThread *p)
 {
@@ -148,7 +148,7 @@ static void CMtThread_Destruct(CMtThread *p)
 #define MY_BUF_ALLOC(buf, size, newSize) \
   if (buf == 0 || size != newSize) \
   { IAlloc_Free(p->mtCoder->alloc, buf); \
-    size = newSize; buf = IAlloc_Alloc(p->mtCoder->alloc, size); \
+    size = newSize; buf = (Byte *)IAlloc_Alloc(p->mtCoder->alloc, size); \
     if (buf == 0) return SZ_ERROR_MEM; }
 
 static SRes CMtThread_Prepare(CMtThread *p)
@@ -306,7 +306,7 @@ SRes MtCoder_Code(CMtCoder *p)
     for (i = 0; i < numThreads; i++)
     {
       CMtThread *t = &p->threads[i];
-      if (LoopThread_StartSubThread(&t->thread) != SZ_OK || i == 10)
+      if (LoopThread_StartSubThread(&t->thread) != SZ_OK)
       {
         res = SZ_ERROR_THREAD;
         p->threads[0].stopReading = True;

@@ -3,7 +3,7 @@
 #ifndef __COMPRESS_MTF8_H
 #define __COMPRESS_MTF8_H
 
-#include "../../Common/Types.h"
+#include "../../../C/CpuArch.h"
 
 namespace NCompress {
 
@@ -11,11 +11,11 @@ struct CMtf8Encoder
 {
   Byte Buf[256];
 
-  int FindAndMove(Byte v)
+  unsigned FindAndMove(Byte v)
   {
-    int pos;
+    unsigned pos;
     for (pos = 0; Buf[pos] != v; pos++);
-    int resPos = pos;
+    unsigned resPos = pos;
     for (; pos >= 8; pos -= 8)
     {
       Buf[pos] = Buf[pos - 1];
@@ -27,7 +27,7 @@ struct CMtf8Encoder
       Buf[pos - 6] = Buf[pos - 7];
       Buf[pos - 7] = Buf[pos - 8];
     }
-    for (; pos > 0; pos--)
+    for (; pos != 0; pos--)
       Buf[pos] = Buf[pos - 1];
     Buf[0] = v;
     return resPos;
@@ -63,11 +63,7 @@ struct CMtf8Decoder
 };
 */
 
-#ifdef _WIN64
-#define MODE_64BIT
-#endif
-
-#ifdef MODE_64BIT
+#ifdef MY_CPU_64BIT
 typedef UInt64 CMtfVar;
 #define MTF_MOVS 3
 #else
@@ -83,9 +79,9 @@ struct CMtf8Decoder
   CMtfVar Buf[256 >> MTF_MOVS];
 
   void StartInit() { memset(Buf, 0, sizeof(Buf)); }
-  void Add(unsigned int pos, Byte val) { Buf[pos >> MTF_MOVS] |= ((CMtfVar)val << ((pos & MTF_MASK) << 3));  }
+  void Add(unsigned pos, Byte val) { Buf[pos >> MTF_MOVS] |= ((CMtfVar)val << ((pos & MTF_MASK) << 3));  }
   Byte GetHead() const { return (Byte)Buf[0]; }
-  Byte GetAndMove(unsigned int pos)
+  Byte GetAndMove(unsigned pos)
   {
     UInt32 lim = ((UInt32)pos >> MTF_MOVS);
     pos = (pos & MTF_MASK) << 3;
@@ -102,12 +98,11 @@ struct CMtf8Decoder
     }
     for (; i < lim; i += 2)
     {
-      CMtfVar next = Buf[i];
-      Buf[i] = (next << 8) | prev;
-      prev = (next >> (MTF_MASK << 3));
-      next = Buf[i + 1];
-      Buf[i + 1] = (next << 8) | prev;
-      prev = (next >> (MTF_MASK << 3));
+      CMtfVar n0 = Buf[i];
+      CMtfVar n1 = Buf[i + 1];
+      Buf[i    ] = (n0 << 8) | prev;
+      Buf[i + 1] = (n1 << 8) | (n0 >> (MTF_MASK << 3));
+      prev = (n1 >> (MTF_MASK << 3));
     }
     CMtfVar next = Buf[i];
     CMtfVar mask = (((CMtfVar)0x100 << pos) - 1);
@@ -167,7 +162,7 @@ public:
         for (int t = Counts[g] - 1; t >= 0; t--, i--)
           Buf[i] = Buf[offset + t];
       }
-      while(g != 0);
+      while (g != 0);
       
       for (i = kSmallSize - 1; i >= 0; i--)
         Buf[i] = SmallBuffer[i];

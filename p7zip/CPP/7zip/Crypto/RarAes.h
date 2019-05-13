@@ -5,53 +5,46 @@
 
 #include "../../../C/Aes.h"
 
-#include "Common/Buffer.h"
-#include "Common/MyCom.h"
+#include "../../Common/MyBuffer.h"
 
-#include "../ICoder.h"
 #include "../IPassword.h"
 
-namespace NCrypto {
-namespace NRar29 {
+#include "MyAes.h"
 
-const UInt32 kRarAesKeySize = 16;
+namespace NCrypto {
+namespace NRar3 {
+
+const unsigned kAesKeySize = 16;
 
 class CDecoder:
-  public ICompressFilter,
-  public ICompressSetDecoderProperties2,
-  public ICryptoSetPassword,
-  public CMyUnknownImp
+  public CAesCbcDecoder
+  // public ICompressSetDecoderProperties2,
+  // public ICryptoSetPassword
 {
   Byte _salt[8];
   bool _thereIsSalt;
-  CByteBuffer buffer;
-  Byte aesKey[kRarAesKeySize];
-  Byte aesInit[AES_BLOCK_SIZE];
-  bool _needCalculate;
+  bool _needCalc;
+  // bool _rar350Mode;
+  
+  CByteBuffer _password;
+  
+  Byte _key[kAesKeySize];
+  Byte _iv[AES_BLOCK_SIZE];
 
-  CAesCbc Aes;
-
-  bool _rar350Mode;
-
-  void Calculate();
-
+  void CalcKey();
 public:
-
-  MY_UNKNOWN_IMP2(
-    ICryptoSetPassword,
-    ICompressSetDecoderProperties2)
-
+  /*
+  MY_UNKNOWN_IMP1(
+    ICryptoSetPassword
+    // ICompressSetDecoderProperties2
+  */
   STDMETHOD(Init)();
-
-  STDMETHOD_(UInt32, Filter)(Byte *data, UInt32 size);
-
-  STDMETHOD(CryptoSetPassword)(const Byte *aData, UInt32 aSize);
-
-  // ICompressSetDecoderProperties
-  STDMETHOD(SetDecoderProperties2)(const Byte *data, UInt32 size);
+  
+  void SetPassword(const Byte *data, unsigned size);
+  HRESULT SetDecoderProperties2(const Byte *data, UInt32 size);
 
   CDecoder();
-  void SetRar350Mode(bool rar350Mode) { _rar350Mode = rar350Mode; }
+  // void SetRar350Mode(bool rar350Mode) { _rar350Mode = rar350Mode; }
 };
 
 }}

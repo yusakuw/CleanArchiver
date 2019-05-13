@@ -4,7 +4,7 @@
 
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
- 
+
 #ifdef __BORLANDC__
     #pragma hdrstop
 #endif
@@ -14,6 +14,43 @@
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
 #endif
+
+#undef _WIN32
+ 
+#ifdef __WXMAC__
+
+#define UInt32 max_UInt32
+#include <ApplicationServices/ApplicationServices.h>
+#undef UInt32
+
+#endif
+
+#include "Windows/Control/Dialog.h" // REGISTER_STRINGTABLE
+
+#include "Common/StringConvert.h"
+
+bool GetProgramFolderPath(UString &folder)
+{
+  const char *p7zip_home_dir = getenv("P7ZIP_HOME_DIR");
+  if (p7zip_home_dir == 0) p7zip_home_dir="./";
+
+  folder = MultiByteToUnicodeString(p7zip_home_dir);
+
+  return true;
+}
+
+// FIXME
+
+static pthread_t g_main_thread;
+
+void verify_main_thread(void)
+{
+	if (g_main_thread != pthread_self())
+	{
+		printf("verify_main_thread-wxFM\n");
+		abort();
+	}
+}
 
 // #include "../GUI/p7zip_32.xpm"
 
@@ -65,31 +102,6 @@ void ShowHelpWindow(HWND hwnd, LPCWSTR topicFile)
   wxLaunchDefaultBrowser(path2);
 }
 
-////////////////////////////// TRIES ///////////////////////////////////
-
-// FIXME : duplicate
-
-#if 0
-static const TCHAR *kCUBasePath = TEXT("Software/7-ZIP");
-static const WCHAR *kLangValueName = L"Lang";
-
-void SaveRegLang(const UString &langFile)
-{
-  CKey key;
-  key.Create(HKEY_CURRENT_USER, kCUBasePath);
-  key.SetValue(kLangValueName, langFile);
-}
-
-void ReadRegLang(UString &langFile)
-{
-  langFile.Empty();
-  CKey key;
-  if (key.Open(HKEY_CURRENT_USER, kCUBasePath, KEY_READ) == ERROR_SUCCESS)
-    key.QueryValue(kLangValueName, langFile);
-}
-#endif
-
-
 //////////////////////////////////
 
 #define NEED_NAME_WINDOWS_TO_UNIX
@@ -111,61 +123,6 @@ void mySplitCommandLineW(int numArguments, TCHAR  **arguments,UStringVector &par
 // private classes
 // ----------------------------------------------------------------------------
 
-// Define a new frame type
-#if 0
-class MyFrame: public wxFrame
-{
-public:
-    // ctor
-    MyFrame(wxFrame *frame, const wxString& title, int x, int y, int w, int h);
-    // virtual ~MyFrame();
-
-    // operations
-    void WriteText(const wxString& text) { m_txtctrl->WriteText(text); }
-    
-protected:
-    // callbacks
-    void OnWorkerEvent(wxCommandEvent& event);
-private:
-    // just some place to put our messages in
-    wxTextCtrl *m_txtctrl;
-    DECLARE_EVENT_TABLE()
-};
-
-enum {
-    WORKER_EVENT=100    // this one gets sent from the worker thread
-};
-    
-BEGIN_EVENT_TABLE(MyFrame, wxFrame)
-    EVT_MENU(WORKER_EVENT, MyFrame::OnWorkerEvent)
-    // EVT_IDLE(MyFrame::OnIdle)
-END_EVENT_TABLE()
-
-// My frame constructor
-MyFrame::MyFrame(wxFrame *frame, const wxString& title,
-                 int x, int y, int w, int h)
-       : wxFrame(frame, wxID_ANY, title, wxPoint(x, y), wxSize(w, h))
-{
-	//FIXME this->SetIcon(wxICON(p7zip_32));
-    
-#if wxUSE_STATUSBAR
-    CreateStatusBar(2);
-#endif // wxUSE_STATUSBAR
-
-    m_txtctrl = new wxTextCtrl(this, wxID_ANY, _T(""), wxPoint(0, 0), wxSize(0, 0), wxTE_MULTILINE | wxTE_READONLY);
-}
-
-void myCreateHandle(int n);
-void MyFrame::OnWorkerEvent(wxCommandEvent& event)
-{
-	int n = event.GetInt();
-	myCreateHandle(n);
-}
-
-wxWindow * g_window=0;
-#endif
-
-
 // Define a new application type, each program should derive a class from wxApp
 class MyApp : public wxApp
 {
@@ -177,6 +134,11 @@ public:
     // initialization (doing it here and not in the ctor allows to have an error
     // return: if OnInit() returns false, the application terminates)
     virtual bool OnInit();
+
+#ifdef __WXMAC__
+	virtual void MacOpenFile	(	const wxString & 	fileName	 ) ;	
+#endif
+	
 };
 
 // Create a new application object: this macro will allow wxWidgets to create
@@ -205,18 +167,52 @@ public:
 };
 #endif
 
+#ifdef __WXMAC__
+void doMacOpenFile(	const UString & fileName	 );
+
+void MyApp::MacOpenFile	(	const wxString & 	fileName	 ) 
+{
+	const wchar_t * wstr =	fileName.wc_str ();
+	
+	// ::MessageBoxW(0, L"MyApp::MacOpenFile 2", wstr  , MB_OKCANCEL | MB_ICONQUESTION);
+	
+	doMacOpenFile(wstr);
+}
+#endif
+
 // 'Main program' equivalent: the program execution "starts" here
 bool MyApp::OnInit()
 {
     // don't parse the command-line options !
     // : if ( !wxApp::OnInit() ) return false;
 
+/*
+*/	
+#ifdef __WXMAC__
+ProcessSerialNumber PSN;
+GetCurrentProcess(&PSN);
+TransformProcessType(&PSN,kProcessTransformToForegroundApplication);
+#endif
+
+
+/*
+	UString args(L"Args=");
+	
+	for(int i = 0 ; i < wxApp::argc ; i++)
+		args = args + L" '" + wxApp::argv[i] + L"'";
+	
+	
+	::MessageBoxW(0, L"MyApp::OnInit 3", args, MB_OKCANCEL | MB_ICONQUESTION);
+*/
+
+	g_main_thread = pthread_self();
+
   { // define P7ZIP_HOME_DIR
     extern void my_windows_split_path(const AString &p_path, AString &dir , AString &base);
     static char p7zip_home_dir[MAX_PATH];
 
     UString fullPath;
-    NDirectory::MyGetFullPathName(wxApp::argv[0], fullPath);
+    NDir::MyGetFullPathName(wxApp::argv[0], fullPath);
     AString afullPath = GetAnsiString(fullPath);
 
     AString dir,name;
@@ -242,7 +238,6 @@ bool MyApp::OnInit()
 
     SetTopWindow(frame);
 
-    g_window = frame;
 #endif
 
     /*
@@ -261,12 +256,33 @@ bool MyApp::OnInit()
     return true;
 }
 
-DWORD WINAPI GetTickCount(VOID) {
-	static wxStopWatch sw;
-	return sw.Time();
-}
-
 //////////////////////////////////////////
+
+#include "resourceGui.h"
+
+static CStringTable g_stringTable[] =
+{
+  /* resourceGui.rc */
+  /******************/
+  { IDS_MESSAGE_NO_ERRORS     ,L"There are no errors" },
+
+  { IDS_PROGRESS_TESTING      ,L"Testing" },
+
+  { IDS_CHECKSUM_CALCULATING    ,L"Checksum calculating..." },
+  { IDS_CHECKSUM_INFORMATION    ,L"Checksum information" },
+  { IDS_CHECKSUM_CRC_DATA       ,L"CRC checksum for data:" },
+  { IDS_CHECKSUM_CRC_DATA_NAMES ,L"CRC checksum for data and names:" },
+  { IDS_CHECKSUM_CRC_STREAMS_NAMES ,L"CRC checksum for streams and names:" },
+
+  { IDS_INCORRECT_VOLUME_SIZE ,L"Incorrect volume size" },
+
+  { IDS_OPENNING  ,L"Opening..." },
+  { IDS_SCANNING  ,L"Scanning..." },
+
+	{ 0 , 0 }
+};
+
+REGISTER_STRINGTABLE(g_stringTable)
 
 #if 0
 #include "resource.h"

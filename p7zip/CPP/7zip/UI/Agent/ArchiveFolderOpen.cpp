@@ -1,43 +1,37 @@
-// Zip/ArchiveFolder.cpp
+// Agent/ArchiveFolderOpen.cpp
 
 #include "StdAfx.h"
 
+#include "../../../Windows/DLL.h"
+
 #include "Agent.h"
-
-#include "Common/StringConvert.h"
-
-static inline UINT GetCurrentFileCodePage()
-  {  return AreFileApisANSI() ? CP_ACP : CP_OEMCP; }
 
 void CArchiveFolderManager::LoadFormats()
 {
-  if (!_codecs)
-  {
-    _compressCodecsInfo = _codecs = new CCodecs;
-    _codecs->Load();
-  }
+  LoadGlobalCodecs();
 }
 
 int CArchiveFolderManager::FindFormat(const UString &type)
 {
-  for (int i = 0; i < _codecs->Formats.Size(); i++)
-    if (type.CompareNoCase(_codecs->Formats[i].Name) == 0)
+  FOR_VECTOR (i, g_CodecsObj->Formats)
+    if (type.IsEqualTo_NoCase(g_CodecsObj->Formats[i].Name))
       return i;
   return -1;
 }
 
-STDMETHODIMP CArchiveFolderManager::OpenFolderFile(IInStream *inStream, const wchar_t *filePath,
+STDMETHODIMP CArchiveFolderManager::OpenFolderFile(IInStream *inStream,
+    const wchar_t *filePath, const wchar_t *arcFormat,
     IFolderFolder **resultFolder, IProgress *progress)
 {
   CMyComPtr<IArchiveOpenCallback> openArchiveCallback;
-  if (progress != 0)
+  if (progress)
   {
     CMyComPtr<IProgress> progressWrapper = progress;
     progressWrapper.QueryInterface(IID_IArchiveOpenCallback, &openArchiveCallback);
   }
   CAgent *agent = new CAgent();
   CMyComPtr<IInFolderArchive> archive = agent;
-  RINOK(agent->Open(inStream, filePath, NULL, openArchiveCallback));
+  RINOK(agent->Open(inStream, filePath, arcFormat, NULL, openArchiveCallback));
   return agent->BindToRootFolder(resultFolder);
 }
 
@@ -58,42 +52,69 @@ STDMETHODIMP CArchiveFolderManager::GetExtensions(const wchar_t *type, BSTR *ext
   if (formatIndex <  0)
     return E_INVALIDARG;
   // Exts[0].Ext;
-  return StringToBstr(_codecs.Formats[formatIndex].GetAllExtensions(), extensions);
+  return StringToBstr(g_CodecsObj.Formats[formatIndex].GetAllExtensions(), extensions);
 }
 */
+
+static void AddIconExt(const CCodecIcons &lib, UString &dest)
+{
+  FOR_VECTOR (i, lib.IconPairs)
+  {
+    dest.Add_Space_if_NotEmpty();
+    dest += lib.IconPairs[i].Ext;
+  }
+}
+
 STDMETHODIMP CArchiveFolderManager::GetExtensions(BSTR *extensions)
 {
   LoadFormats();
   *extensions = 0;
   UString res;
-  for (int i = 0; i < _codecs->Libs.Size(); i++)
-  {
-    const CCodecLib &lib = _codecs->Libs[i];
-    for (int j = 0; j < lib.IconPairs.Size(); j++)
-    {
-      if (!res.IsEmpty())
-        res += L' ';
-      res += lib.IconPairs[j].Ext;
-    }
-  }
+  
+  #ifdef EXTERNAL_CODECS
+  
+  FOR_VECTOR (i, g_CodecsObj->Libs)
+    AddIconExt(g_CodecsObj->Libs[i], res);
+  
+  #endif
+  
+  AddIconExt(g_CodecsObj->InternalIcons, res);
   return StringToBstr(res, extensions);
 }
 
 STDMETHODIMP CArchiveFolderManager::GetIconPath(const wchar_t *ext, BSTR *iconPath, Int32 *iconIndex)
 {
-  LoadFormats();
   *iconPath = 0;
   *iconIndex = 0;
-  for (int i = 0; i < _codecs->Libs.Size(); i++)
+#ifdef _WIN32
+  LoadFormats();
+
+  #ifdef EXTERNAL_CODECS
+
+  FOR_VECTOR (i, g_CodecsObj->Libs)
   {
-    const CCodecLib &lib = _codecs->Libs[i];
-    int ii = lib.FindIconIndex(ext);
-    if (ii >= 0)
+    const CCodecLib &lib = g_CodecsObj->Libs[i];
+    int ii;
+    if (lib.FindIconIndex(ext, ii))
     {
       *iconIndex = ii;
-      return StringToBstr(GetUnicodeString(lib.Path, GetCurrentFileCodePage()), iconPath);
+      return StringToBstr(fs2us(lib.Path), iconPath);
     }
   }
+  
+  #endif
+
+  int ii;
+  if (g_CodecsObj->InternalIcons.FindIconIndex(ext, ii))
+  {
+    FString path;
+    if (NWindows::NDLL::MyGetModuleFileName(path))
+    {
+      *iconIndex = ii;
+      return StringToBstr(fs2us(path), iconPath);
+    }
+  }
+#endif
   return S_OK;
 }
 
@@ -102,13 +123,13 @@ STDMETHODIMP CArchiveFolderManager::GetTypes(BSTR *types)
 {
   LoadFormats();
   UString typesStrings;
-  for(int i = 0; i < _codecs.Formats.Size(); i++)
+  FOR_VECTOR(i, g_CodecsObj.Formats)
   {
-    const CArcInfoEx &ai = _codecs.Formats[i];
+    const CArcInfoEx &ai = g_CodecsObj.Formats[i];
     if (ai.AssociateExts.Size() == 0)
       continue;
     if (i != 0)
-      typesStrings += L' ';
+      typesStrings.Add_Space();
     typesStrings += ai.Name;
   }
   return StringToBstr(typesStrings, types);

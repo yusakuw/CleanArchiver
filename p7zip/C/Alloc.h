@@ -4,16 +4,12 @@
 #ifndef __COMMON_ALLOC_H
 #define __COMMON_ALLOC_H
 
-#include <stddef.h>
+#include "7zTypes.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+EXTERN_C_BEGIN
 
 void *MyAlloc(size_t size);
 void MyFree(void *address);
-
-#ifdef _WIN32
 
 void SetLargePageSize();
 
@@ -22,21 +18,9 @@ void MidFree(void *address);
 void *BigAlloc(size_t size);
 void BigFree(void *address);
 
-#else
+extern ISzAlloc g_Alloc;
+extern ISzAlloc g_BigAlloc;
 
-#include <stdlib.h> /* malloc */
-
-#define MyAlloc(size) malloc(size)
-#define MyFree(address) free(address)
-#define MidAlloc(size) malloc(size)
-#define MidFree(address) free(address)
-#define BigAlloc(size) malloc(size)
-#define BigFree(address) free(address)
-
-#endif
-
-#ifdef __cplusplus
-}
-#endif
+EXTERN_C_END
 
 #endif

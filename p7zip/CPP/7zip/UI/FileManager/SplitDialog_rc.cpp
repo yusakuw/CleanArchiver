@@ -15,6 +15,8 @@
     #include "wx/wx.h"
 #endif  
 
+#undef _WIN32
+
 #include "Windows/Control/DialogImpl.h"
 
 #include "SplitDialogRes.h"
@@ -30,23 +32,23 @@ class CSplitDialogImpl : public NWindows::NControl::CModalDialogImpl
 	wxBoxSizer* topsizer = new wxBoxSizer(wxVERTICAL);
 
 
-	topsizer->Add(new wxStaticText(this, IDC_STATIC_SPLIT_PATH, _T("&Split to:")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
+	topsizer->Add(new wxStaticText(this, IDT_SPLIT_PATH, _T("&Split to:")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
 
 
 	{
 	wxBoxSizer *pathSizer = new wxBoxSizer(wxHORIZONTAL);
 
-	wxComboBox *combo = new wxComboBox(this, IDC_COMBO_SPLIT_PATH, wxEmptyString, wxDefaultPosition, wxSize(600,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
-	wxButton *button = new wxButton(this, IDC_BUTTON_SPLIT_PATH, wxT("..."), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	wxComboBox *combo = new wxComboBox(this, IDC_SPLIT_PATH, wxEmptyString, wxDefaultPosition, wxSize(600,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
+	wxButton *button = new wxButton(this, IDB_SPLIT_PATH, wxT("..."), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
 	pathSizer->Add(combo, 1, wxLEFT|wxRIGHT|wxEXPAND, 5);
 	pathSizer->Add(button, 0, wxLEFT|wxRIGHT|wxEXPAND, 5);
 
 	topsizer->Add(pathSizer, 0 ,wxALL | wxALIGN_LEFT, 5 );
 	}
 
-	topsizer->Add(new wxStaticText(this, IDC_STATIC_SPLIT_VOLUME, _T("Split to &volumes,  bytes:")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
+	topsizer->Add(new wxStaticText(this, IDT_SPLIT_VOLUME, _T("Split to &volumes,  bytes:")) , 0 ,wxALL | wxALIGN_LEFT, 5 );
 
-	wxComboBox *combo = new wxComboBox(this, IDC_COMBO_SPLIT_VOLUME, wxEmptyString, wxDefaultPosition, wxSize(600,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
+	wxComboBox *combo = new wxComboBox(this, IDC_SPLIT_VOLUME, wxEmptyString, wxDefaultPosition, wxSize(600,-1), pathArray, wxCB_DROPDOWN|wxCB_SORT);
 
 	topsizer->Add(combo, 0 ,wxALL | wxALIGN_LEFT, 5 );
 
@@ -65,15 +67,15 @@ private:
 
 static CStringTable g_stringTable[] =
 {
-	{ IDS_COMPRESS_INCORRECT_VOLUME_SIZE, L"Incorrect volume size" },
 	{ 0 , 0 }
 };
 
 
-REGISTER_DIALOG(IDD_DIALOG_SPLIT,CSplitDialog,g_stringTable)
+REGISTER_DIALOG(IDD_SPLIT,CSplitDialog,g_stringTable)
 
 BEGIN_EVENT_TABLE(CSplitDialogImpl, wxDialog)
 	EVT_BUTTON(wxID_ANY,   CModalDialogImpl::OnAnyButton)
 	EVT_CHECKBOX(wxID_ANY, CModalDialogImpl::OnAnyButton)
+	EVT_MENU(WORKER_EVENT, CModalDialogImpl::OnWorkerEvent)
 END_EVENT_TABLE()
 

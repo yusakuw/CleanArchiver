@@ -1,22 +1,32 @@
 // BenchmarkDialog.h
 
-#ifndef __BENCHMARKDIALOG_H
-#define __BENCHMARKDIALOG_H
+#ifndef __BENCHMARK_DIALOG_H
+#define __BENCHMARK_DIALOG_H
+
+#include "../../../Windows/Synchronization.h"
+
+#include "../../../Windows/Control/ComboBox.h"
+#include "../../../Windows/Control/Edit.h"
+
+#include "../Common/Bench.h"
+
+#include "../FileManager/DialogSize.h"
 
 #include "BenchmarkDialogRes.h"
-
-#include "Windows/Control/Dialog.h"
-#include "Windows/Control/ComboBox.h"
-#include "Windows/Synchronization.h"
-#include "../../Compress/LZMA_Alone/LzmaBench.h"
-
-#ifdef EXTERNAL_LZMA
-#include "../Common/LoadCodecs.h"
-#endif
 
 struct CBenchInfo2 : public CBenchInfo
 {
   void Init()  { GlobalTime = UserTime = 0; }
+
+  UInt64 GetCompressRating(UInt32 dictSize) const
+  {
+    return ::GetCompressRating(dictSize, GlobalTime, GlobalFreq, UnpackSize * NumIterations);
+  }
+
+  UInt64 GetDecompressRating() const
+  {
+    return ::GetDecompressRating(GlobalTime, GlobalFreq, UnpackSize, PackSize, NumIterations);
+  }
 };
 
 class CProgressSyncInfo
@@ -28,7 +38,6 @@ public:
   UInt32 DictionarySize;
   UInt32 NumThreads;
   UInt64 NumPasses;
-  // UInt64 NumErrors;
   NWindows::NSynchronization::CManualResetEvent _startEvent;
   NWindows::NSynchronization::CCriticalSection CS;
 
@@ -39,11 +48,18 @@ public:
   CBenchInfo2 DecompressingInfoTemp;
   CBenchInfo2 DecompressingInfo;
 
+  AString Text;
+  bool TextWasChanged;
+
+  // UString Freq;
+  // bool FreqWasChanged;
+
   CProgressSyncInfo()
   {
     if (_startEvent.Create() != S_OK)
       throw 3986437;
   }
+  
   void Init()
   {
     Changed = false;
@@ -57,8 +73,14 @@ public:
     DecompressingInfo.Init();
 
     NumPasses = 0;
-    // NumErrors = 0;
+
+    // Freq.SetFromAscii("MHz: ");
+    // FreqWasChanged = true;
+
+    Text.Empty();
+    TextWasChanged = true;
   }
+  
   void Stop()
   {
     NWindows::NSynchronization::CCriticalSectionLock lock(CS);
@@ -87,14 +109,40 @@ public:
   void WaitCreating() { _startEvent.Lock(); }
 };
 
+#ifdef _WIN32
+struct CMyFont
+{
+  HFONT _font;
+  CMyFont(): _font(NULL) {}
+  ~CMyFont()
+  {
+    if (_font)
+      DeleteObject(_font);
+  }
+  void Create(const LOGFONT *lplf)
+  {
+    _font = CreateFontIndirect(lplf);
+  }
+};
+#else
+struct CMyFont
+{
+  CMyFont() {}
+};
+#endif
+
+
 class CBenchmarkDialog:
   public NWindows::NControl::CModalDialog
 {
   NWindows::NControl::CComboBox m_Dictionary;
   NWindows::NControl::CComboBox m_NumThreads;
+  NWindows::NControl::CEdit _consoleEdit;
   UINT_PTR _timer;
-  UINT32 _startTime;
+  UInt32 _startTime;
+  CMyFont _font;
 
+  bool OnSize(WPARAM /* wParam */, int xSize, int ySize);
   bool OnTimer(WPARAM timerID, LPARAM callback);
   virtual bool OnInit();
   void OnRestartButton();
@@ -108,7 +156,7 @@ class CBenchmarkDialog:
   void PrintRating(UInt64 rating, UINT controlID);
   void PrintUsage(UInt64 usage, UINT controlID);
   void PrintResults(
-      UINT32 dictionarySize,
+      UInt32 dictionarySize,
       const CBenchInfo2 &info, UINT usageID, UINT speedID, UINT rpuID, UINT ratingID,
       bool decompressMode = false);
 
@@ -116,16 +164,24 @@ class CBenchmarkDialog:
   UInt32 OnChangeDictionary();
   void OnChangeSettings();
 public:
-  CProgressSyncInfo _syncInfo;
+  CProgressSyncInfo Sync;
+  bool TotalMode;
+  CObjectVector<CProperty> Props;
 
-  CBenchmarkDialog(): _timer(0) {}
-  INT_PTR Create(HWND wndParent = 0) { return CModalDialog::Create(IDD_DIALOG_BENCHMARK, wndParent); }
+  CBenchmarkDialog(): _timer(0), TotalMode(false) {}
+  INT_PTR Create(HWND wndParent = 0)
+  {
+    BIG_DIALOG_SIZE(332, 228);
+    return CModalDialog::Create(TotalMode ? IDD_BENCH_TOTAL : SIZED_DIALOG(IDD_BENCH), wndParent);
+  }
+  void MessageBoxError(LPCWSTR message)
+  {
+    MessageBoxW(*this, message, L"7-Zip", MB_ICONERROR);
+  }
 };
 
 HRESULT Benchmark(
-  #ifdef EXTERNAL_LZMA
-  CCodecs *codecs,
-  #endif
-  UInt32 dictionarySize, UInt32 numThreads);
+    DECL_EXTERNAL_CODECS_LOC_VARS
+    const CObjectVector<CProperty> props, HWND hwndParent = NULL);
 
 #endif

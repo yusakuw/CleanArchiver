@@ -1,15 +1,19 @@
 // RegistryUtils.h
 
-#include "Common/StringConvert.h"
+#ifndef __REGISTRY_UTILS_H
+#define __REGISTRY_UTILS_H
 
-#ifndef __REGISTRYUTILS_H
-#define __REGISTRYUTILS_H
+#include "../../../Common/MyTypes.h"
+#include "../../../Common/MyString.h"
 
-void SaveRegLang(const UString &langFile);
-void ReadRegLang(UString &langFile);
+void SaveRegLang(const UString &path);
+void ReadRegLang(UString &path);
 
-void SaveRegEditor(const UString &editorPath);
-void ReadRegEditor(UString &editorPath);
+void SaveRegEditor(bool useEditor, const UString &path);
+void ReadRegEditor(bool useEditor, UString &path);
+
+void SaveRegDiff(const UString &path);
+void ReadRegDiff(UString &path);
 
 void SaveShowDots(bool showDots);
 bool ReadShowDots();
@@ -17,8 +21,8 @@ bool ReadShowDots();
 void SaveShowRealFileIcons(bool show);
 bool ReadShowRealFileIcons();
 
-void SaveShowSystemMenu(bool showSystemMenu);
-bool ReadShowSystemMenu();
+void Save_ShowSystemMenu(bool showSystemMenu);
+bool Read_ShowSystemMenu();
 
 void SaveFullRow(bool enable);
 bool ReadFullRow();
@@ -35,12 +39,20 @@ bool ReadAlternativeSelection();
 bool ReadLockMemoryEnable();
 void SaveLockMemoryEnable(bool enable);
 
-/*
 void SaveSingleClick(bool enable);
 bool ReadSingleClick();
 
+/*
 void SaveUnderline(bool enable);
 bool ReadUnderline();
+*/
+
+void SaveFlatView(UInt32 panelIndex, bool enable);
+bool ReadFlatView(UInt32 panelIndex);
+
+/*
+void Save_ShowDeleted(bool enable);
+bool Read_ShowDeleted();
 */
 
 #endif

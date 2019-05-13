@@ -1,7 +1,7 @@
 // SysIconUtils.h
 
-#ifndef __SYSICONUTILS_H
-#define __SYSICONUTILS_H
+#ifndef __SYS_ICON_UTILS_H
+#define __SYS_ICON_UTILS_H
 
 #include "Common/MyString.h"
 
@@ -9,43 +9,52 @@ struct CExtIconPair
 {
   UString Ext;
   int IconIndex;
-  UString TypeName;
+  // UString TypeName;
 
+  // int Compare(const CExtIconPair &a) const { return MyStringCompareNoCase(Ext, a.Ext); }
 };
 
-inline bool operator==(const CExtIconPair &a1, const CExtIconPair &a2)
+struct CAttribIconPair
 {
-  return (a1.Ext == a2.Ext);
-}
+  DWORD Attrib;
+  int IconIndex;
+  // UString TypeName;
 
-inline bool operator<(const CExtIconPair &a1, const CExtIconPair &a2)
-{
-  return (a1.Ext < a2.Ext);
-}
+  // int Compare(const CAttribIconPair &a) const { return Ext.Compare(a.Ext); }
+};
 
 class CExtToIconMap
 {
-  int _dirIconIndex;
-  UString _dirTypeName;
-  int _noExtIconIndex;
-  UString _noExtTypeName;
-  CObjectVector<CExtIconPair> _map;
 public:
-  CExtToIconMap(): _dirIconIndex(-1), _noExtIconIndex(-1) {}
+  CRecordVector<CAttribIconPair> _attribMap;
+  CObjectVector<CExtIconPair> _extMap;
+  int SplitIconIndex;
+  int SplitIconIndex_Defined;
+  
+  CExtToIconMap(): SplitIconIndex_Defined(false) {}
+
   void Clear()
   {
-    _dirIconIndex = -1;
-    _noExtIconIndex = -1;
-    _map.Clear();
+    SplitIconIndex_Defined = false;
+    _extMap.Clear();
+    _attribMap.Clear();
   }
-  int GetIconIndex(UINT32 attributes, const UString &fileName, UString &typeName);
-  int GetIconIndex(UINT32 attributes, const UString &fileName);
+  int GetIconIndex(DWORD attrib, const wchar_t *fileName /* , UString *typeName */);
+  // int GetIconIndex(DWORD attrib, const UString &fileName);
 };
 
-DWORD_PTR GetRealIconIndex(LPCTSTR path, DWORD attributes, int &iconIndex);
-#ifndef _UNICODE
-DWORD_PTR GetRealIconIndex(LPCWSTR path, DWORD attributes, int &iconIndex);
-#endif
+DWORD_PTR GetRealIconIndex(CFSTR path, DWORD attrib, int &iconIndex);
 int GetIconIndexForCSIDL(int csidl);
+
+#ifdef WIN32
+inline HIMAGELIST GetSysImageList(bool smallIcons)
+{
+  SHFILEINFO shellInfo;
+  return (HIMAGELIST)SHGetFileInfo(TEXT(""),
+      FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_DIRECTORY,
+      &shellInfo, sizeof(shellInfo),
+      SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX | (smallIcons ? SHGFI_SMALLICON : SHGFI_ICON));
+}
+#endif
 
 #endif

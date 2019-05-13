@@ -15,17 +15,18 @@
 #include "wx/artprov.h"
 #include "wx/imaglist.h"
 
+#undef _WIN32
+ 
 #include "resource.h"
+
+#include "PropertyNameRes.h"
 
 #include "App.h"
 
+#include "Windows/Window.h" // FIXME
 #include "Windows/Control/DialogImpl.h"
 #include "Windows/Control/ListView.h"
 #include "Windows/Control/Window2.h"
-
-// FIXME
-#undef IDCLOSE
-#define IDCLOSE wxID_EXIT
 
 #define static const
 #include "../GUI/p7zip_32.xpm"
@@ -52,6 +53,8 @@ extern HWND g_HWND;
 #include "res/InfoPNG.h"
 #include "res/Info2PNG.h"
 
+#include "LangUtils.h"
+
 #include <wx/mstream.h>
 #define wxGetBitmapFromMemory(name) _wxGetBitmapFromMemory(name ## _png, sizeof(name ## _png))
 
@@ -67,11 +70,14 @@ static inline wxBitmap _wxGetBitmapFromMemory(const unsigned char *data, int len
 typedef wxListCtrl CExplorerListCtrl;
 
 class MyFrame;
+class myToolBar;
 
 class SevenZipPanel : public wxPanel
 {
 	static int count;
-
+	
+	MyFrame *m_frame;
+	
 	CExplorerListCtrl *m_pListCtrlExplorer;
 	NWindows::NControl::CWindow2 *_wList;
 	
@@ -79,8 +85,6 @@ class SevenZipPanel : public wxPanel
 	wxBitmapButton *m_pBmpButtonParentFolder;
 	wxComboBox *m_pComboBoxPath;
 	wxStatusBar *m_pStatusBar;
-
-	MyFrame *m_frame;
 
 	wxImageList imgList;
 
@@ -112,9 +116,11 @@ public:
 
 	void OnLeftDown(wxMouseEvent &event );
 	void OnRightDown(wxMouseEvent &event );
-
+	
+	void OnTextEnter(wxCommandEvent& event);
+	
         void WriteText(const wxString& text) {
-		printf("DEBUG : %ls\n",(const wchar_t *)text);
+		printf("DEBUG : %ls",(const wchar_t *)text);
         }
 
 	/* Don't work ...
@@ -170,7 +176,7 @@ protected:
 
 		int wmId = event.GetId();
 
-		if (wmId >= kToolbarStartID)
+		if (wmId >= kMenuCmdID_Toolbar_Start && wmId < kMenuCmdID_Toolbar_End)
 		{
 			ExecuteCommand(wmId);
 			return ; // 0;
@@ -189,18 +195,50 @@ protected:
 private:
 	SevenZipPanel * _panel1;
 	SevenZipPanel * _panel2;
+	myToolBar     * m_toolBar;
     DECLARE_EVENT_TABLE()
 };
 
-enum {
-    WORKER_EVENT=100    // this one gets sent from the worker thread
-};
-    
 BEGIN_EVENT_TABLE(MyFrame, wxFrame)
 	EVT_MENU(WORKER_EVENT, MyFrame::OnWorkerEvent)
 	EVT_MENU(wxID_ANY, MyFrame::OnAnyMenu)
 	EVT_CLOSE(MyFrame::OnCloseWindow)
 END_EVENT_TABLE()
+
+
+static bool TEST_create(HWND hWnd) // FIXME
+{
+extern HWND g_HWND;
+	 CMyListView _listView;
+	
+	int _baseID = 1000;
+	
+	HWND w = NWindows::GetDlgItem(g_HWND, _baseID + 1);
+	if (w == 0) 
+	{
+		printf("Can't find id=%d\n",_baseID + 1);
+		return false;
+	}
+	printf("CPanel::OnCreate : _listView.Attach(%p)\n",w);
+	_listView.Attach(w);
+	
+	_listView.SetRedraw(false);
+	
+	_listView.DeleteAllItems();
+	
+	_listView.DeleteColumn(1);
+		
+	_listView.InsertColumn(0, L"toto", 100);
+	
+//	_listView.SetItemCount(1);
+
+	_listView.InsertItem(0, L"item 1");
+
+
+	_listView.SetRedraw(true);	
+	
+	return true;
+}
 
 // My frame constructor
 MyFrame::MyFrame(void (*wm_create)(HWND),wxFrame *frame, const wxString& title,
@@ -209,9 +247,13 @@ MyFrame::MyFrame(void (*wm_create)(HWND),wxFrame *frame, const wxString& title,
 {
 printf("===MyFrame::MyFrame===BEGIN===\n");
 
+	m_toolBar = 0;
+
 	this->SetIcon(wxICON(p7zip_32));
 	
 	g_HWND = this; // FIXME
+	
+	SetMinSize(wxSize(800,700));
 	
 	wxBoxSizer *topsizer = new wxBoxSizer( wxVERTICAL );
 
@@ -227,8 +269,10 @@ printf("===MyFrame::MyFrame===BEGIN===\n");
 	// Create the toolbar
 	// FIXME RecreateToolbar();
 printf("===MyFrame::MyFrame===WM_CREATE===\n");
-       wm_create(this);
-
+	wm_create(this);
+// FIXME	TEST_create(this);
+	
+	
        // Create the toolbar // FIXME
 	RecreateToolbar();
 
@@ -245,19 +289,21 @@ void myCreateHandle(int n);
 void MyFrame::OnWorkerEvent(wxCommandEvent& event)
 {
 	int n = event.GetInt();
+// printf(" MyFrame::OnWorkerEvent(n=%d)\n",n);
 	myCreateHandle(n);
 }
 
 wxWindow * g_window=0;
 HWND myCreateAndShowMainWindow(LPCTSTR title,void (*fct)(HWND))
 {
-    MyFrame *frame = new MyFrame(fct,(wxFrame *)NULL, title, 50, 50, 450, 340);
+   MyFrame *frame = new MyFrame(fct,(wxFrame *)NULL, title, 40, 40, 800, 600);
+
+   g_window = frame; 
+  
    // Don't Show the frame !
    frame->Show(true); // FIXME
 
    // FIXME : SetTopWindow(g_HWND);
-
-   g_window = frame;
 
    return frame;
 }
@@ -312,24 +358,48 @@ void MyFrame::PopulateToolbar(wxToolBar* p_toolBar)
  toolBar->AddTool(wxID_NEW, _T("New"),toolBarBitmaps[Tool_new], wxNullBitmap, wxITEM_NORMAL,
  _T("New file"), _T("This is help for new file tool"));
  */
-	myToolBar toolBar(p_toolBar,true);
+   m_toolBar = new myToolBar(p_toolBar,true);
 
-	const int kWidth  = 24;
-	const int kHeight = 24;
+   const int kWidth  = 24;
+   const int kHeight = 24;
 
-	// FIXME toolBar->SetToolBitmapSize(wxSize(24,24));
-	toolBar.SetToolBitmapSize(wxSize(kWidth,kHeight));
-	toolBar.AddTool(kAddCommand, wxT("Add"), wxGetBitmapFromMemory(ADD2));
-	toolBar.AddTool(kExtractCommand,wxT("Extract"), wxGetBitmapFromMemory(EXTRACT2));
-	toolBar.AddTool(kTestCommand, wxT("Test"), wxGetBitmapFromMemory(TEST2));
+	
+   UString msg;
 
-	toolBar.AddSeparator();
+   // FIXME toolBar->SetToolBitmapSize(wxSize(24,24));
+   m_toolBar->SetToolBitmapSize(wxSize(kWidth,kHeight));
 
-	toolBar.AddTool(IDM_COPY_TO, wxT("Copy"), wxGetBitmapFromMemory(COPY2));
-	toolBar.AddTool(IDM_MOVE_TO, wxT("Move"), wxGetBitmapFromMemory(MOVE2));
-	toolBar.AddTool(IDM_DELETE, wxT("Delete"), wxGetBitmapFromMemory(DELETE2));
-	toolBar.AddTool(IDM_FILE_PROPERTIES, wxT("Info"), wxGetBitmapFromMemory(INFO2));
+    msg = LangString(IDS_ADD); //  kMenuCmdID_Toolbar_Add,     IDB_ADD,     IDB_ADD2,     IDS_ADD },
+    if (msg == L"") msg = L"Add";
+	m_toolBar->AddTool(kMenuCmdID_Toolbar_Add, (const wchar_t *)msg, wxGetBitmapFromMemory(ADD2));
+	
+    msg = LangString(IDS_EXTRACT); // { kMenuCmdID_Toolbar_Extract, IDB_EXTRACT, IDB_EXTRACT2, IDS_EXTRACT },
+    if (msg == L"") msg = L"Extract";	
+	m_toolBar->AddTool(kMenuCmdID_Toolbar_Extract,(const wchar_t *)msg, wxGetBitmapFromMemory(EXTRACT2));
+	
+    msg = LangString(IDS_TEST); // { kMenuCmdID_Toolbar_Test,    IDB_TEST,    IDB_TEST2,    IDS_TEST }
+    if (msg == L"") msg = L"Test";	
+   m_toolBar->AddTool(kMenuCmdID_Toolbar_Test,(const wchar_t *)msg, wxGetBitmapFromMemory(TEST2));
+	
+   m_toolBar->AddSeparator();
 
+    msg = LangString(IDS_BUTTON_COPY); // { IDM_COPY_TO,    IDB_COPY,   IDB_COPY2,   IDS_BUTTON_COPY },
+    if (msg == L"") msg = L"Copy";		
+    m_toolBar->AddTool(IDS_BUTTON_COPY, (const wchar_t *)msg, wxGetBitmapFromMemory(COPY2));
+	
+    msg = LangString(IDS_BUTTON_MOVE); // { IDM_MOVE_TO,    IDB_MOVE,   IDB_MOVE2,   IDS_BUTTON_MOVE }
+    if (msg == L"") msg = L"Move";		
+    m_toolBar->AddTool(IDM_MOVE_TO, (const wchar_t *)msg, wxGetBitmapFromMemory(MOVE2));
+	
+    msg = LangString(IDS_BUTTON_DELETE); // { IDM_DELETE,     IDB_DELETE, IDB_DELETE2, IDS_BUTTON_DELETE } ,
+    if (msg == L"") msg = L"Delete";	
+    m_toolBar->AddTool(IDM_DELETE, (const wchar_t *)msg, wxGetBitmapFromMemory(DELETE2));
+	
+    msg = LangString(IDS_BUTTON_INFO); // { IDM_PROPERTIES, IDB_INFO,   IDB_INFO2,   IDS_BUTTON_INFO }
+    if (msg == L"") msg = L"Info";	
+    m_toolBar->AddTool(IDM_PROPERTIES, (const wchar_t *)msg, wxGetBitmapFromMemory(INFO2));
+
+#if 0
 	////////////////////////////////////////////////////////
 
 	/* FIXME
@@ -345,21 +415,22 @@ void MyFrame::PopulateToolbar(wxToolBar* p_toolBar)
 	toolBar.AddSeparator();
 
 	wxIcon i_plus = wxArtProvider::GetIcon(wxART_ADD_BOOKMARK    , wxART_TOOLBAR  , wxSize(kWidth,kHeight));
-	toolBar.AddTool(wxID_ANY, wxT("Add Bookmark"), i_plus);
+	m_toolBar->AddTool(wxID_ANY, wxT("Add Bookmark"), i_plus);
 
 	wxIcon i_go_up_dir = wxArtProvider::GetIcon(wxART_GO_DIR_UP   , wxART_TOOLBAR  , wxSize(kWidth,kHeight));
-	toolBar.AddTool(wxID_ANY, wxT("Go up dir"), i_go_up_dir);
+	m_toolBar->AddTool(wxID_ANY, wxT("Go up dir"), i_go_up_dir);
 
 	wxIcon i_folder = wxArtProvider::GetIcon(wxART_FOLDER   , wxART_TOOLBAR  , wxSize(kWidth,kHeight));
-	toolBar.AddTool(wxID_ANY, wxT("Folder"), i_folder);
+	m_toolBar->AddTool(wxID_ANY, wxT("Folder"), i_folder);
 
 	wxIcon i_missing_image = wxArtProvider::GetIcon(wxART_MISSING_IMAGE   , wxART_TOOLBAR  , wxSize(kWidth,kHeight));
-	toolBar.AddTool(wxID_ANY, wxT("missing image"), i_missing_image);
+	m_toolBar->AddTool(wxID_ANY, wxT("missing image"), i_missing_image);
 	*/
 
 	///////////////////////////////////////////////////////
 
-	toolBar.Realize();
+#endif
+	m_toolBar->Realize();
 
 	// toolBar->SetRows(!(toolBar->IsVertical()) ? m_rows : 10 / m_rows);
 }
@@ -415,9 +486,12 @@ void rc_MyLoadMenu(HWND hWnd)
 	wxMenu *m;
 	wxMenu *m_file = m = new wxMenu;
 	{
-		m->Append(IDM_FILE_OPEN, _T("&Open\tEnter"));
-		m->Append(IDM_FILE_OPEN_INSIDE,_T("Open &Inside\tCtrl+PgDn"));
-		m->Append(IDM_FILE_OPEN_OUTSIDE,_T("Open O&utside\tShift+Enter"));
+		m->Append(IDM_OPEN, _T("&Open"));  // FIXME "&Open\tEnter" - don't use Enter to support combobox enter ...
+		m->Append(IDM_OPEN_INSIDE,_T("Open &Inside\tCtrl+PgDn"));
+		m->Append(IDM_OPEN_INSIDE_ONE,_T("Open Inside *"));
+		m->Append(IDM_OPEN_INSIDE_PARSER,_T("Open Inside #"));
+		m->Append(IDM_OPEN_OUTSIDE,_T("Open O&utside\tShift+Enter"));
+		m->Append(IDM_FILE_VIEW,_T("&View\tF3"));
 		m->Append(IDM_FILE_EDIT,_T("&Edit\tF4"));
 		m->AppendSeparator();
 		m->Append(IDM_RENAME,_T("Rena&me\tF2"));
@@ -425,35 +499,44 @@ void rc_MyLoadMenu(HWND hWnd)
 		m->Append(IDM_MOVE_TO,_T("&Move To...\tF6"));
 		m->Append(IDM_DELETE,_T("&Delete\tDel"));
 		m->AppendSeparator();
-		m->Append(IDM_FILE_SPLIT,_T("&Split file..."));
-		m->Append(IDM_FILE_COMBINE,_T("Com&bine files..."));
+		m->Append(IDM_SPLIT,_T("&Split file..."));
+		m->Append(IDM_COMBINE,_T("Com&bine files..."));
 		m->AppendSeparator();
-		m->Append(IDM_FILE_PROPERTIES,_T("P&roperties\tAlt+Enter"));
-		m->Append(IDM_FILE_COMMENT,_T("Comme&nt\tCtrl+Z"));
-		m->Append(IDM_FILE_CRC,_T("Calculate checksum"));
+		m->Append(IDM_PROPERTIES,_T("P&roperties\tAlt+Enter"));
+		m->Append(IDM_COMMENT,_T("Comme&nt\tCtrl+Z"));
+
+		wxMenu * subMenuCRC = new wxMenu;
+		subMenuCRC->Append(IDM_CRC32   ,_T("CRC-32"));
+		subMenuCRC->Append(IDM_CRC64   ,_T("CRC-64"));
+		subMenuCRC->Append(IDM_SHA1    ,_T("SHA-1"));
+		subMenuCRC->Append(IDM_SHA256  ,_T("SHA-256"));
+		subMenuCRC->Append(IDM_HASH_ALL,_T("*"));
+		m->AppendSubMenu(subMenuCRC,_T("CRC"));
+
+		m->Append(IDM_DIFF,_T("Di&ff"));
 		m->AppendSeparator();
 		m->Append(IDM_CREATE_FOLDER,_T("Create Folder\tF7"));
 		m->Append(IDM_CREATE_FILE,_T("Create File\tCtrl+N"));
 		m->AppendSeparator();
-		m->Append(IDCLOSE,_T("E&xit\tAlt+F4"));   
+		m->Append(IDEXIT,_T("E&xit\tAlt+F4"));   
 	}
 	wxMenu *m_edit = m = new wxMenu;
 	{
-		m->Append(IDM_EDIT_CUT, _T("Cu&t\tCtrl+X"))->Enable(true);              // GRAYED
-		// m->Enable(IDM_EDIT_CUT, false);
-		m->Append(IDM_EDIT_COPY, _T("&Copy\tCtrl+C"))->Enable(true);            // GRAYED
-		m->Append(IDM_EDIT_PASTE, _T("&Paste\tCtrl+V"))->Enable(true);          // GRAYED
-		m->AppendSeparator();
+		// m->Append(IDM_EDIT_CUT, _T("Cu&t\tCtrl+X"))->Enable(true);              // GRAYED
+		// m->Append(IDM_EDIT_COPY, _T("&Copy\tCtrl+C"))->Enable(true);            // GRAYED
+		// m->Append(IDM_EDIT_PASTE, _T("&Paste\tCtrl+V"))->Enable(true);          // GRAYED
+		// m->AppendSeparator();
 		m->Append(IDM_SELECT_ALL, _T("Select &All\tShift+[Grey +]")); 
 		m->Append(IDM_DESELECT_ALL, _T("Deselect All\tShift+[Grey -]")); 
 		m->Append(IDM_INVERT_SELECTION, _T("&Invert Selection\tGrey *"));   
 		m->Append(IDM_SELECT, _T("Select...\tGrey +"));           
 		m->Append(IDM_DESELECT, _T("Deselect...\tGrey -"));        
-		m->Append(IDM_SELECT_BY_TYPE, _T("Select by Type\tAlt+[Grey+]")); 
-		m->Append(IDM_DESELECT_BY_TYPE, _T("Deselect by Type\tAlt+[Grey -]")); 
+// FIXME		m->Append(IDM_SELECT_BY_TYPE, _T("Select by Type\tAlt+[Grey+]")); 
+// FIXME		m->Append(IDM_DESELECT_BY_TYPE, _T("Deselect by Type\tAlt+[Grey -]")); 
 	}
 	wxMenu *m_view = m = new wxMenu;
 	{
+/*
 		m->AppendRadioItem(IDM_VIEW_LARGE_ICONS, _T("Lar&ge Icons\tCtrl+1"));        
 		m->AppendRadioItem(IDM_VIEW_SMALL_ICONS, _T("S&mall Icons\tCtrl+2"));      
 		m->AppendRadioItem(IDM_VIEW_LIST, _T("&List\tCtrl+3"));             
@@ -478,7 +561,10 @@ void rc_MyLoadMenu(HWND hWnd)
 			m->Append(12112, _T("Toolbars"), subMenu); // FIXME ID ?
 		}
 		m->AppendSeparator();
-		m->Append(IDM_OPEN_ROOT_FOLDER, _T("Open Root Folder\t" STRING_PATH_SEPARATOR));        
+*/
+		// NO "/" is used on Unix Path ... m->Append(IDM_OPEN_ROOT_FOLDER, _T("Open Root Folder\t" STRING_PATH_SEPARATOR));        
+		m->Append(IDM_OPEN_ROOT_FOLDER, _T("Open Root Folder\t" "\\"));        
+
 		m->Append(IDM_OPEN_PARENT_FOLDER, _T("Up One Level\tBackspace"));
 		m->Append(IDM_FOLDERS_HISTORY, _T("Folders History...\tAlt+F12"));
 		m->AppendSeparator();
@@ -490,7 +576,7 @@ void rc_MyLoadMenu(HWND hWnd)
 			wxMenu* subMenu = new wxMenu;
 			for (int i = 0; i < 10; i++)
 			{
-				UString s = LangString(IDS_BOOKMARK, 0x03000720);
+				UString s = LangString(IDS_BOOKMARK);
 				s += L" ";
 				wchar_t c = (wchar_t)(L'0' + i);
 				s += c;
@@ -504,19 +590,18 @@ void rc_MyLoadMenu(HWND hWnd)
 		m->AppendSeparator();
 		for (int i = 0; i < 10; i++)
 		{
-			UString path = g_App.AppState.FastFolders.GetString(i);
-			const int kMaxSize = 100;
-			const int kFirstPartSize = kMaxSize / 2;
-			if (path.Length() > kMaxSize)
-			{
-				path = path.Left(kFirstPartSize) + UString(L" ... ") +
-					path.Right(kMaxSize - kFirstPartSize);
-			}
-			UString s = path;
-			if (s.IsEmpty())
-				s = L"-";
-			s += L"\tAlt+";
-			s += (wchar_t)(L'0' + i);
+      UString s = g_App.AppState.FastFolders.GetString(i);
+      const int kMaxSize = 100;
+      const int kFirstPartSize = kMaxSize / 2;
+      if (s.Len() > kMaxSize)
+      {
+        s.Delete(kFirstPartSize, s.Len() - kMaxSize);
+        s.Insert(kFirstPartSize, L" ... ");
+      }
+      if (s.IsEmpty())
+        s = L'-';
+      s += L"\tAlt+";
+      s += (wchar_t)(L'0' + i);
 			// menu.AppendItem(MF_STRING, kOpenBookmarkMenuID + i, s);
 			m->Append( kOpenBookmarkMenuID + i, wxString(s));
 		}
@@ -524,7 +609,7 @@ void rc_MyLoadMenu(HWND hWnd)
 	}
 	wxMenu *m_tools = m = new wxMenu;
 	{
-		m->Append(IDM_OPTIONS, _T("&Options..."));
+//		m->Append(IDM_OPTIONS, _T("&Options..."));
 		m->Append(IDM_BENCHMARK, _T("&Benchmark"));
 	}
 	wxMenu *m_help = m = new wxMenu;
@@ -552,94 +637,182 @@ static CStringTable g_stringTable[] =
 {
   /* resource.rc */	  
   /***************/
-	{ IDS_APP_TITLE, L"7-Zip File Manager" },
+  { IDS_BOOKMARK   ,L"Bookmark" },
 
-	{ IDS_COPY                , L"Copy" },
-	{ IDS_MOVE                , L"Move" },
-	{ IDS_COPY_TO             , L"Copy to:" },
-	{ IDS_MOVE_TO             , L"Move to:" },
-	{ IDS_COPYING             , L"Copying..." },
-	{ IDS_MOVING              , L"Moving..." },
-	{ IDS_CANNOT_COPY         , L"You cannot move or copy items for such folders." },
-	{ IDS_SPLITTING           , L"Splitting..." },
-	{ IDS_SPLIT_CONFIRM_TITLE , L"Confirm Splitting" },
-	{ IDS_SPLIT_CONFIRM_MESSAGE , L"Are you sure you want to split file into {0} volumes?" },
-	{ IDS_SPLIT_VOL_MUST_BE_SMALLER , L"Volume size must be smaller than size of original file" },
+  { IDS_OPTIONS    ,L"Options" },
 
-	{ IDS_COMBINE             , L"Combine Files" },
-	{ IDS_COMBINE_TO          , L"&Combine to:" },
-	{ IDS_COMBINING           , L"Combining..." },
-	{ IDS_COMBINE_SELECT_ONE_FILE , L"Select only first file" },
+  { IDS_N_SELECTED_ITEMS  ,L"{0} object(s) selected" },
 
-	{ IDS_CHECKSUM_CALCULATING , L"Checksum calculating..." },
-	{ IDS_CHECKSUM_INFORMATION , L"Checksum information" },
-	{ IDS_CHECKSUM_CRC_DATA     , L"CRC checksum for data:" },
-	{ IDS_CHECKSUM_CRC_DATA_NAMES , L"CRC checksum for data and names:" },
+  { IDS_FILE_EXIST  ,L"File {0} is already exist" },
+  { IDS_WANT_UPDATE_MODIFIED_FILE  ,L"File '{0}' was modified.\nDo you want to update it in the archive?" },
+  { IDS_CANNOT_UPDATE_FILE   ,L"Can not update file\n'{0}'" },
+  { IDS_CANNOT_START_EDITOR  ,L"Cannot start editor." },
+  { IDS_VIRUS                ,L"The file looks like a virus (the file name contains long spaces in name)." },
+  { IDS_MESSAGE_UNSUPPORTED_OPERATION_FOR_LONG_PATH_FOLDER ,L"The operation cannot be called from a folder that has a long path." },
+  { IDS_SELECT_ONE_FILE      ,L"You must select one file" },
+  { IDS_SELECT_FILES         ,L"You must select one or more files" },
+  { IDS_TOO_MANY_ITEMS       ,L"Too many items" },
 
-	{ IDS_SCANNING , L"Scanning..." },
+  { IDS_COPY      ,L"Copy" },
+  { IDS_MOVE      ,L"Move" },
+  { IDS_COPY_TO   ,L"Copy to:" },
+  { IDS_MOVE_TO   ,L"Move to:" },
+  { IDS_COPYING   ,L"Copying..." },
+  { IDS_MOVING    ,L"Moving..." },
+  { IDS_RENAMING  ,L"Renaming..." },
 
-	{ IDS_PROPERTIES , L"Properties" },
+  { IDS_OPERATION_IS_NOT_SUPPORTED  ,L"Operation is not supported." },
+  { IDS_ERROR_RENAMING  ,L"Error Renaming File or Folder" },
+  { IDS_CONFIRM_FILE_COPY   ,L"Confirm File Copy" },
+  { IDS_WANT_TO_COPY_FILES  ,L"Are you sure you want to copy files to archive" },
 
-	{ IDS_OPERATION_IS_NOT_SUPPORTED , L"Operation is not supported." },
+  { IDS_CONFIRM_FILE_DELETE   ,L"Confirm File Delete" },
+  { IDS_CONFIRM_FOLDER_DELETE ,L"Confirm Folder Delete" },
+  { IDS_CONFIRM_ITEMS_DELETE  ,L"Confirm Multiple File Delete" },
+  { IDS_WANT_TO_DELETE_FILE   ,L"Are you sure you want to delete '{0}'?" },
+  { IDS_WANT_TO_DELETE_FOLDER ,L"Are you sure you want to delete the folder '{0}' and all its contents?" },
+  { IDS_WANT_TO_DELETE_ITEMS  ,L"Are you sure you want to delete these {0} items?" },
+  { IDS_DELETING              ,L"Deleting..." },
+  { IDS_ERROR_DELETING        ,L"Error Deleting File or Folder" },
+  { IDS_ERROR_LONG_PATH_TO_RECYCLE  ,L"The system cannot move a file with long path to the Recycle Bin" },
   
-	{ IDS_CONFIRM_FILE_DELETE , L"Confirm File Delete" },
-	{ IDS_CONFIRM_FOLDER_DELETE , L"Confirm Folder Delete" },
-	{ IDS_CONFIRM_ITEMS_DELETE , L"Confirm Multiple File Delete" },
-	{ IDS_WANT_TO_DELETE_FILE , L"Are you sure you want to delete '{0}'?" },
-	{ IDS_WANT_TO_DELETE_FOLDER , L"Are you sure you want to delete the folder '{0}' and all its contents?" },
-	{ IDS_WANT_TO_DELETE_ITEMS  , L"Are you sure you want to delete these {0} items?" },
-	{ IDS_DELETING            , L"Deleting..." },
-	{ IDS_ERROR_DELETING      , L"Error Deleting File or Folder" },
-	{ IDS_RENAMING            , L"Renaming..." },
-	{ IDS_ERROR_RENAMING      , L"Error Renaming File or Folder" },
-	{ IDS_CONFIRM_FILE_COPY   , L"Confirm File Copy" },
-	{ IDS_WANT_TO_COPY_FILES  , L"Are you sure you want to copy files to archive" },
-  
-	{ IDS_CREATE_FOLDER       , L"Create Folder" },
-	{ IDS_CREATE_FOLDER_NAME  , L"Folder name:" },
-	{ IDS_CREATE_FOLDER_DEFAULT_NAME , L"New Folder" },
-	{ IDS_CREATE_FOLDER_ERROR , L"Error Creating Folder" },
-	{ IDS_CREATE_FILE         , L"Create File" },
-	{ IDS_CREATE_FILE_NAME    , L"File Name:" },
-	{ IDS_CREATE_FILE_DEFAULT_NAME , L"New File" },
-	{ IDS_CREATE_FILE_ERROR   , L"Error Creating File" },
-	{ IDS_SELECT              , L"Select" },
-	{ IDS_DESELECT            , L"Deselect" },
-	{ IDS_SELECT_MASK         , L"Mask:" },
-	{ IDS_FOLDERS_HISTORY     , L"Folders History" },
-	{ IDS_N_SELECTED_ITEMS    , L"{0} object(s) selected" },
-	{ IDS_FILES_COLON         , L"Files:" },
-	{ IDS_FOLDERS_COLON       , L"Folders:" },
-	{ IDS_SIZE_COLON          , L"Size:" },
+  { IDS_CREATE_FOLDER       ,L"Create Folder" },
+  { IDS_CREATE_FILE         ,L"Create File" },
+  { IDS_CREATE_FOLDER_NAME  ,L"Folder name:" },
+  { IDS_CREATE_FILE_NAME    ,L"File Name:" },
+  { IDS_CREATE_FOLDER_DEFAULT_NAME  ,L"New Folder" },
+  { IDS_CREATE_FILE_DEFAULT_NAME    ,L"New File" },
+  { IDS_CREATE_FOLDER_ERROR ,L"Error Creating Folder" },
+  { IDS_CREATE_FILE_ERROR   ,L"Error Creating File" },
 
-	{ IDS_PROP_TOTAL_SIZE     , L"Total Size" },
-	{ IDS_PROP_FREE_SPACE     , L"Free Space" },
-	{ IDS_PROP_CLUSTER_SIZE   , L"Cluster Size" },
-	{ IDS_PROP_VOLUME_NAME    , L"Label" },
-	{ IDS_PROP_LOCAL_NAME     , L"Local Name" },
-	{ IDS_PROP_PROVIDER       , L"Provider" },
-	{ IDS_OPTIONS             , L"Options" },
-	{ IDS_COMMENT             , L"Comment" },
-	{ IDS_COMMENT2            , L"&Comment:" },
-	{ IDS_SYSTEM              , L"System" },
-	{ IDS_TOO_MANY_ITEMS      , L"Too many items" },
-	{ IDS_WANT_UPDATE_MODIFIED_FILE , L"File '{0}' was modified.\nDo you want to update it in the archive?" },
-	{ IDS_CANNOT_UPDATE_FILE  , L"Can not update file\n'{0}'" },
-	{ IDS_CANNOT_START_EDITOR , L"Cannot start editor." },
-	{ IDS_OPENNING            , L"Opening..." },
-	{ IDS_ADD                 , L"Add" },
-	{ IDS_EXTRACT             , L"Extract" },
-	{ IDS_TEST                , L"Test" },
-	{ IDS_BUTTON_COPY         , L"Copy" },
-	{ IDS_BUTTON_MOVE         , L"Move" },
-	{ IDS_BUTTON_DELETE       , L"Delete" },
-	{ IDS_BUTTON_INFO         , L"Info" },
-	{ IDS_BOOKMARK            , L"Bookmark" },
-	{ IDS_COMPUTER            , L"Computer" },
-	{ IDS_NETWORK             , L"Network" },
+  { IDS_COMMENT      ,L"Comment" },
+  { IDS_COMMENT2     ,L"&Comment:" },
+  { IDS_SELECT       ,L"Select" },
+  { IDS_DESELECT     ,L"Deselect" },
+  { IDS_SELECT_MASK  ,L"Mask:" },
 
-	{ IDS_PROGRESS_TESTING    , L"Testing" },
-	{ IDS_MESSAGE_NO_ERRORS   , L"There are no errors" },
+  { IDS_PROPERTIES   ,L"Properties" },
+  { IDS_FOLDERS_HISTORY  ,L"Folders History" },
+
+  { IDS_COMPUTER   ,L"Computer" },
+  { IDS_NETWORK    ,L"Network" },
+  { IDS_DOCUMENTS  ,L"Documents" },
+  { IDS_SYSTEM     ,L"System" },
+
+  { IDS_ADD            ,L"Add" },
+  { IDS_EXTRACT        ,L"Extract" },
+  { IDS_TEST           ,L"Test" },
+  { IDS_BUTTON_COPY    ,L"Copy" },
+  { IDS_BUTTON_MOVE    ,L"Move" },
+  { IDS_BUTTON_DELETE  ,L"Delete" },
+  { IDS_BUTTON_INFO    ,L"Info" },
+
+  { IDS_SPLITTING            ,L"Splitting..." },
+  { IDS_SPLIT_CONFIRM_TITLE  ,L"Confirm Splitting" },
+  { IDS_SPLIT_CONFIRM_MESSAGE  ,L"Are you sure you want to split file into {0} volumes?" },
+  { IDS_SPLIT_VOL_MUST_BE_SMALLER ,L"Volume size must be smaller than size of original file" },
+
+  { IDS_COMBINE     ,L"Combine Files" },
+  { IDS_COMBINE_TO  ,L"&Combine to:" },
+  { IDS_COMBINING   ,L"Combining..." },
+  { IDS_COMBINE_SELECT_ONE_FILE  ,L"Select only first part of split file" },
+  { IDS_COMBINE_CANT_DETECT_SPLIT_FILE  ,L"Can not detect file as split file" },
+  { IDS_COMBINE_CANT_FIND_MORE_THAN_ONE_PART  ,L"Can not find more than one part of split file" },
+
+
+
+  /* PropertyName.rc */	  
+  /*******************/
+  { IDS_PROP_PATH         ,L"Path" },
+  { IDS_PROP_NAME         ,L"Name" },
+  { IDS_PROP_EXTENSION    ,L"Extension" },
+  { IDS_PROP_IS_FOLDER    ,L"Folder" },
+  { IDS_PROP_SIZE         ,L"Size" },
+  { IDS_PROP_PACKED_SIZE  ,L"Packed Size" },
+  { IDS_PROP_ATTRIBUTES   ,L"Attributes" },
+  { IDS_PROP_CTIME        ,L"Created" },
+  { IDS_PROP_ATIME        ,L"Accessed" },
+  { IDS_PROP_MTIME        ,L"Modified" },
+  { IDS_PROP_SOLID        ,L"Solid" },
+  { IDS_PROP_C0MMENTED    ,L"Commented" },
+  { IDS_PROP_ENCRYPTED    ,L"Encrypted" },
+  { IDS_PROP_SPLIT_BEFORE ,L"Split Before" },
+  { IDS_PROP_SPLIT_AFTER  ,L"Split After" },
+  { IDS_PROP_DICTIONARY_SIZE ,L"Dictionary" },
+  { IDS_PROP_CRC          ,L"CRC" },
+  { IDS_PROP_FILE_TYPE    ,L"Type" },
+  { IDS_PROP_ANTI         ,L"Anti" },
+  { IDS_PROP_METHOD       ,L"Method" },
+  { IDS_PROP_HOST_OS      ,L"Host OS" },
+  { IDS_PROP_FILE_SYSTEM  ,L"File System" },
+  { IDS_PROP_USER         ,L"User" },
+  { IDS_PROP_GROUP        ,L"Group" },
+  { IDS_PROP_BLOCK        ,L"Block" },
+  { IDS_PROP_COMMENT      ,L"Comment" },
+  { IDS_PROP_POSITION     ,L"Position" },
+  { IDS_PROP_PREFIX       ,L"Path Prefix" },
+  { IDS_PROP_FOLDERS      ,L"Folders" },
+  { IDS_PROP_FILES        ,L"Files" },
+  { IDS_PROP_VERSION      ,L"Version" },
+  { IDS_PROP_VOLUME       ,L"Volume" },
+  { IDS_PROP_IS_VOLUME    ,L"Multivolume" },
+  { IDS_PROP_OFFSET       ,L"Offset" },
+  { IDS_PROP_LINKS        ,L"Links" },
+  { IDS_PROP_NUM_BLOCKS   ,L"Blocks" },
+  { IDS_PROP_NUM_VOLUMES  ,L"Volumes" },
+
+  { IDS_PROP_BIT64        ,L"64-bit" },
+  { IDS_PROP_BIG_ENDIAN   ,L"Big-endian" },
+  { IDS_PROP_CPU          ,L"CPU" },
+  { IDS_PROP_PHY_SIZE     ,L"Physical Size" },
+  { IDS_PROP_HEADERS_SIZE ,L"Headers Size" },
+  { IDS_PROP_CHECKSUM     ,L"Checksum" },
+  { IDS_PROP_CHARACTS     ,L"Characteristics" },
+  { IDS_PROP_VA           ,L"Virtual Address" },
+  { IDS_PROP_ID           ,L"ID" },
+  { IDS_PROP_SHORT_NAME   ,L"Short Name" },
+  { IDS_PROP_CREATOR_APP  ,L"Creator Application" },
+  { IDS_PROP_SECTOR_SIZE  ,L"Sector Size" },
+  { IDS_PROP_POSIX_ATTRIB ,L"Mode" },
+  { IDS_PROP_SYM_LINK     ,L"Symbolic Link" },
+  { IDS_PROP_ERROR        ,L"Error" },
+  { IDS_PROP_TOTAL_SIZE   ,L"Total Size" },
+  { IDS_PROP_FREE_SPACE   ,L"Free Space" },
+  { IDS_PROP_CLUSTER_SIZE ,L"Cluster Size" },
+  { IDS_PROP_VOLUME_NAME  ,L"Label" },
+  { IDS_PROP_LOCAL_NAME   ,L"Local Name" },
+  { IDS_PROP_PROVIDER     ,L"Provider" },
+  { IDS_PROP_NT_SECURITY  ,L"NT Security" },
+  { IDS_PROP_ALT_STREAM   ,L"Alternate Stream" },
+  { IDS_PROP_AUX          ,L"Aux" },
+  { IDS_PROP_DELETED      ,L"Deleted" },
+  { IDS_PROP_IS_TREE      ,L"Is Tree" },
+  { IDS_PROP_SHA1         ,L"SHA-1" },
+  { IDS_PROP_SHA256       ,L"SHA-256" },
+  { IDS_PROP_ERROR_TYPE   ,L"Error Type" },
+  { IDS_PROP_NUM_ERRORS   ,L"Errors" },
+  { IDS_PROP_ERROR_FLAGS  ,L"Errors" },
+  { IDS_PROP_WARNING_FLAGS ,L"Warnings" },
+  { IDS_PROP_WARNING      ,L"Warning" },
+  { IDS_PROP_NUM_STREAMS  ,L"Streams" },
+  { IDS_PROP_NUM_ALT_STREAMS ,L"Alternate Streams" },
+  { IDS_PROP_ALT_STREAMS_SIZE ,L"Alternate Streams Size" },
+  { IDS_PROP_VIRTUAL_SIZE ,L"Virtual Size" },
+  { IDS_PROP_UNPACK_SIZE  ,L"Unpack Size" },
+  { IDS_PROP_TOTAL_PHY_SIZE ,L"Total Physical Size" },
+  { IDS_PROP_VOLUME_INDEX ,L"Volume Index" },
+  { IDS_PROP_SUBTYPE      ,L"SubType" },
+  { IDS_PROP_SHORT_COMMENT ,L"Short Comment" },
+  { IDS_PROP_CODE_PAGE    ,L"Code Page" },
+  { IDS_PROP_IS_NOT_ARC_TYPE  ,L"Is not archive type" },
+  { IDS_PROP_PHY_SIZE_CANT_BE_DETECTED ,L"Physical Size can't be detected" },
+  { IDS_PROP_ZEROS_TAIL_IS_ALLOWED ,L"Zeros Tail Is Allowed" },
+  { IDS_PROP_TAIL_SIZE ,L"Tail Size" },
+  { IDS_PROP_EMB_STUB_SIZE ,L"Embedded Stub Size" },
+  { IDS_PROP_NT_REPARSE   ,L"Link" },
+  { IDS_PROP_HARD_LINK    ,L"Hard Link" },
+  { IDS_PROP_INODE        ,L"iNode" },
+  { IDS_PROP_STREAM_ID    ,L"Stream ID" },
  
 	{ 0 , 0 }
 };
@@ -673,8 +846,8 @@ REGISTER_STRINGTABLE(g_stringTable)
 		pPathSizer->Add(m_pComboBoxPath, 1, wxALL|wxEXPAND, 5);
 
 		m_pListCtrlExplorer = new CExplorerListCtrl(this,_listID,wxDefaultPosition, wxSize(300,300),
-			wxLC_REPORT |
-			wxSUNKEN_BORDER | wxLC_EDIT_LABELS);
+			wxLC_REPORT | // wxLC_EDIT_LABELS |   FIXME
+			wxSUNKEN_BORDER);
 
 		printf("DEBUG : new CExplorerListCtrl(id=%d) => %p\n",_listID,m_pListCtrlExplorer);
 
@@ -685,6 +858,7 @@ REGISTER_STRINGTABLE(g_stringTable)
 		pMainSizer->Add(m_pStatusBar, 0, wxALL|wxEXPAND, 0);
 		SetSizer(pMainSizer);
 		SetAutoLayout (true);
+		SetMinSize(wxSize(800,400));
 		Layout();
 
 		
@@ -740,6 +914,8 @@ REGISTER_STRINGTABLE(g_stringTable)
 		}
 		*/
 	}
+
+	
 
 	void SevenZipPanel::OnDeselected(wxListEvent& event)
 	{
@@ -801,8 +977,6 @@ REGISTER_STRINGTABLE(g_stringTable)
 			wxString msg = wxString::Format(_T("P %d : OnActivated %d : FILE = %d\n"), count,event.GetId(),ind);
 			WriteText(msg);
 		}
-
-
 	}
 
 	void SevenZipPanel::OnFocused(wxListEvent& event)
@@ -944,6 +1118,23 @@ void SevenZipPanel::OnRightClick(wxListEvent& event)
     PopupMenu( &menu, point.x, point.y );
 }
 
+void SevenZipPanel::OnTextEnter(wxCommandEvent& event)
+{	
+	count++;
+
+	NMCBEENDEDITW info;
+	info.hdr.hwndFrom = m_pComboBoxPath;
+	info.hdr.code     = CBEN_ENDEDITW;
+	info.iWhy         = CBENF_RETURN;
+	
+	_wList->OnMessage(WM_NOTIFY , event.GetId() , (LPARAM)&info);
+	
+	{
+		wxString msg = wxString::Format(_T("P %d : OnTextEnter %d\n"), count,event.GetId());
+		WriteText(msg);
+	}
+}
+
 int SevenZipPanel::count = 0;
 
 BEGIN_EVENT_TABLE(SevenZipPanel, wxPanel)
@@ -961,10 +1152,19 @@ EVT_LIST_ITEM_ACTIVATED(wxID_ANY,  SevenZipPanel::OnActivated)
 EVT_LIST_ITEM_FOCUSED(wxID_ANY,  SevenZipPanel::OnFocused)
 
 EVT_LIST_BEGIN_DRAG(wxID_ANY, SevenZipPanel::OnLeftDownBeginDrag)
-EVT_LIST_ITEM_RIGHT_CLICK(wxID_ANY, SevenZipPanel::OnRightClick)
+// FIXME - add for menu on item - EVT_LIST_ITEM_RIGHT_CLICK(wxID_ANY, SevenZipPanel::OnRightClick)
 
 EVT_LIST_COL_CLICK(wxID_ANY, SevenZipPanel::OnColumnClick)
+
+
+EVT_TEXT_ENTER(wxID_ANY, SevenZipPanel::OnTextEnter)  // FIXME - not called
+
 
 END_EVENT_TABLE()
 
 
+
+void appClose(void)
+{
+	g_window->Close(true);
+}

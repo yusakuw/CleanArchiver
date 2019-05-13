@@ -1,11 +1,11 @@
 #ifndef _BASETYPS_H
 #define _BASETYPS_H
 
-#ifdef HAVE_GCCVISIBILITYPATCH
-    #define DLLEXPORT __attribute__ ((visibility("default")))
-  #else
-    #define DLLEXPORT
-  #endif
+#ifdef ENV_HAVE_GCCVISIBILITYPATCH
+  #define DLLEXPORT __attribute__ ((visibility("default")))
+#else
+  #define DLLEXPORT
+#endif
 
 #ifdef __cplusplus
 #define STDAPI extern "C" DLLEXPORT HRESULT

@@ -1,10 +1,9 @@
 // PpmdEncoder.cpp
-// 2009-05-30 : Igor Pavlov : Public domain
 
 #include "StdAfx.h"
 
-// #include <fstream.h>
-// #include <iomanip.h>
+#include "../../../C/Alloc.h"
+#include "../../../C/CpuArch.h"
 
 #include "../Common/StreamUtils.h"
 
@@ -13,60 +12,85 @@
 namespace NCompress {
 namespace NPpmd {
 
-const UInt32 kMinMemSize = (1 << 11);
-const UInt32 kMinOrder = 2;
+static const UInt32 kBufSize = (1 << 20);
 
-/*
-UInt32 g_NumInner = 0;
-UInt32 g_InnerCycles = 0;
+static const Byte kOrders[10] = { 3, 4, 4, 5, 5, 6, 8, 16, 24, 32 };
 
-UInt32 g_Encode2 = 0;
-UInt32 g_Encode2Cycles = 0;
-UInt32 g_Encode2Cycles2 = 0;
-
-class CCounter
+void CEncProps::Normalize(int level)
 {
-public:
-  CCounter() {}
-  ~CCounter()
+  if (level < 0) level = 5;
+  if (level > 9) level = 9;
+  if (MemSize == (UInt32)(Int32)-1)
+    MemSize = level >= 9 ? ((UInt32)192 << 20) : ((UInt32)1 << (level + 19));
+  const unsigned kMult = 16;
+  if (MemSize / kMult > ReduceSize)
   {
-    ofstream ofs("Res.dat");
-    ofs << "innerEncode1    = " << setw(10) << g_NumInner << endl;
-    ofs << "g_InnerCycles   = " << setw(10) << g_InnerCycles << endl;
-    ofs << "g_Encode2       = " << setw(10) << g_Encode2 << endl;
-    ofs << "g_Encode2Cycles = " << setw(10) << g_Encode2Cycles << endl;
-    ofs << "g_Encode2Cycles2= " << setw(10) << g_Encode2Cycles2 << endl;
-    
-  }
-};
-CCounter g_Counter;
-*/
-
-STDMETHODIMP CEncoder::SetCoderProperties(const PROPID *propIDs, const PROPVARIANT *props, UInt32 numProps)
-{
-  for (UInt32 i = 0; i < numProps; i++)
-  {
-    const PROPVARIANT &prop = props[i];
-    switch(propIDs[i])
+    for (unsigned i = 16; i <= 31; i++)
     {
-      case NCoderPropID::kUsedMemorySize:
-        if (prop.vt != VT_UI4)
-          return E_INVALIDARG;
-        if (prop.ulVal < kMinMemSize || prop.ulVal > kMaxMemBlockSize)
-          return E_INVALIDARG;
-        _usedMemorySize = (UInt32)prop.ulVal;
+      UInt32 m = (UInt32)1 << i;
+      if (ReduceSize <= m / kMult)
+      {
+        if (MemSize > m)
+          MemSize = m;
         break;
-      case NCoderPropID::kOrder:
-        if (prop.vt != VT_UI4)
-          return E_INVALIDARG;
-        if (prop.ulVal < kMinOrder || prop.ulVal > kMaxOrderCompress)
-          return E_INVALIDARG;
-        _order = (Byte)prop.ulVal;
-        break;
-      default:
-        return E_INVALIDARG;
+      }
     }
   }
+  if (Order == -1) Order = kOrders[(unsigned)level];
+}
+
+CEncoder::CEncoder():
+  _inBuf(NULL)
+{
+  _props.Normalize(-1);
+  _rangeEnc.Stream = &_outStream.p;
+  Ppmd7_Construct(&_ppmd);
+}
+
+CEncoder::~CEncoder()
+{
+  ::MidFree(_inBuf);
+  Ppmd7_Free(&_ppmd, &g_BigAlloc);
+}
+
+STDMETHODIMP CEncoder::SetCoderProperties(const PROPID *propIDs, const PROPVARIANT *coderProps, UInt32 numProps)
+{
+  int level = -1;
+  CEncProps props;
+  for (UInt32 i = 0; i < numProps; i++)
+  {
+    const PROPVARIANT &prop = coderProps[i];
+    PROPID propID = propIDs[i];
+    if (propID > NCoderPropID::kReduceSize)
+      continue;
+    if (propID == NCoderPropID::kReduceSize)
+    {
+      if (prop.vt == VT_UI8 && prop.uhVal.QuadPart < (UInt32)(Int32)-1)
+        props.ReduceSize = (UInt32)prop.uhVal.QuadPart;
+      continue;
+    }
+    if (prop.vt != VT_UI4)
+      return E_INVALIDARG;
+    UInt32 v = (UInt32)prop.ulVal;
+    switch (propID)
+    {
+      case NCoderPropID::kUsedMemorySize:
+        if (v < (1 << 16) || v > PPMD7_MAX_MEM_SIZE || (v & 3) != 0)
+          return E_INVALIDARG;
+        props.MemSize = v;
+        break;
+      case NCoderPropID::kOrder:
+        if (v < 2 || v > 32)
+          return E_INVALIDARG;
+        props.Order = (Byte)v;
+        break;
+      case NCoderPropID::kNumThreads: break;
+      case NCoderPropID::kLevel: level = (int)v; break;
+      default: return E_INVALIDARG;
+    }
+  }
+  props.Normalize(level);
+  _props = props;
   return S_OK;
 }
 
@@ -74,75 +98,55 @@ STDMETHODIMP CEncoder::WriteCoderProperties(ISequentialOutStream *outStream)
 {
   const UInt32 kPropSize = 5;
   Byte props[kPropSize];
-  props[0] = _order;
-  for (int i = 0; i < 4; i++)
-    props[1 + i] = Byte(_usedMemorySize >> (8 * i));
+  props[0] = (Byte)_props.Order;
+  SetUi32(props + 1, _props.MemSize);
   return WriteStream(outStream, props, kPropSize);
 }
 
-const UInt32 kUsedMemorySizeDefault = (1 << 24);
-const int kOrderDefault = 6;
-
-CEncoder::CEncoder():
-  _usedMemorySize(kUsedMemorySizeDefault),
-  _order(kOrderDefault)
+HRESULT CEncoder::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
+    const UInt64 * /* inSize */, const UInt64 * /* outSize */, ICompressProgressInfo *progress)
 {
-}
-
-
-HRESULT CEncoder::CodeReal(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-      const UInt64 * /* inSize */, const UInt64 * /* outSize */, ICompressProgressInfo *progress)
-{
-  if (!_inStream.Create(1 << 20))
+  if (!_inBuf)
+  {
+    _inBuf = (Byte *)::MidAlloc(kBufSize);
+    if (!_inBuf)
+      return E_OUTOFMEMORY;
+  }
+  if (!_outStream.Alloc(1 << 20))
     return E_OUTOFMEMORY;
-  if (!_rangeEncoder.Create(1 << 20))
-    return E_OUTOFMEMORY;
-  if (!_info.SubAllocator.StartSubAllocator(_usedMemorySize))
+  if (!Ppmd7_Alloc(&_ppmd, _props.MemSize, &g_BigAlloc))
     return E_OUTOFMEMORY;
 
-  _inStream.SetStream(inStream);
-  _inStream.Init();
+  _outStream.Stream = outStream;
+  _outStream.Init();
 
-  _rangeEncoder.SetStream(outStream);
-  _rangeEncoder.Init();
+  Ppmd7z_RangeEnc_Init(&_rangeEnc);
+  Ppmd7_Init(&_ppmd, _props.Order);
 
-  CEncoderFlusher flusher(this);
-
-  _info.MaxOrder = 0;
-  _info.StartModelRare(_order);
-
+  UInt64 processed = 0;
   for (;;)
   {
-    UInt32 size = (1 << 18);
-    do
+    UInt32 size;
+    RINOK(inStream->Read(_inBuf, kBufSize, &size));
+    if (size == 0)
     {
-      Byte symbol;
-      if (!_inStream.ReadByte(symbol))
-      {
-        // here we can write End Mark for stream version.
-        // In current version this feature is not used.
-        // _info.EncodeSymbol(-1, &_rangeEncoder);
-        return S_OK;
-      }
-      _info.EncodeSymbol(symbol, &_rangeEncoder);
+      // We don't write EndMark in PPMD-7z.
+      // Ppmd7_EncodeSymbol(&_ppmd, &_rangeEnc, -1);
+      Ppmd7z_RangeEnc_FlushData(&_rangeEnc);
+      return _outStream.Flush();
     }
-    while (--size != 0);
-    if (progress != NULL)
+    for (UInt32 i = 0; i < size; i++)
     {
-      UInt64 inSize = _inStream.GetProcessedSize();
-      UInt64 outSize = _rangeEncoder.GetProcessedSize();
-      RINOK(progress->SetRatioInfo(&inSize, &outSize));
+      Ppmd7_EncodeSymbol(&_ppmd, &_rangeEnc, _inBuf[i]);
+      RINOK(_outStream.Res);
+    }
+    processed += size;
+    if (progress)
+    {
+      UInt64 outSize = _outStream.GetProcessed();
+      RINOK(progress->SetRatioInfo(&processed, &outSize));
     }
   }
-}
-
-STDMETHODIMP CEncoder::Code(ISequentialInStream *inStream, ISequentialOutStream *outStream,
-    const UInt64 *inSize, const UInt64 *outSize, ICompressProgressInfo *progress)
-{
-  try { return CodeReal(inStream, outStream, inSize, outSize, progress); }
-  catch(const COutBufferException &e) { return e.ErrorCode; }
-  catch(const CInBufferException &e) { return e.ErrorCode; }
-  catch(...) { return E_FAIL; }
 }
 
 }}
