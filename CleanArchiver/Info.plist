@@ -42,7 +42,7 @@
 	<key>CFBundleSignature</key>
 	<string>ClAr</string>
 	<key>CFBundleVersion</key>
-	<string>20190513</string>
+	<string>20190514</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

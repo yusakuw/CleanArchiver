@@ -328,7 +328,7 @@ NSString *AOReplaceAutomatically= @"Replace Automatically";
         sp.nameFieldStringValue = basename;
         spStatus = [sp runModal];
         if (spStatus == NSModalResponseOK) {
-            return [[sp URL] absoluteString];
+            return [[sp URL] path];
         } else {
             return nil;
         }

@@ -331,7 +331,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd zip\n\n[ -e \"zip\" ] && exit 0\n\nfor arch in ${ARCHS}; do\n  build_dir=../build/${arch}\n  mkdir -p ${build_dir}\n\n  make -f unix/Makefile clean\n  make -f unix/Makefile macosx ARCH=${arch}\n  cp zip ${build_dir}\ndone\n\nlipo -create ../build/*/zip -output zip\ncp LICENSE License-zip.txt\n\necho \"Done\"\nexit 0";
+			shellScript = "cd zip\n\n[ -e \"zip\" ] && exit 0\n\nfor arch in ${ARCHS}; do\n  build_dir=../build/${arch}\n  mkdir -p ${build_dir}\n\n  make -f unix/Makefile clean\n  make -f unix/Makefile macosx ARCH=${arch}\n  cp zip ${build_dir}\ndone\n\nlipo -create ../build/*/zip -output zip\ncp LICENSE License-zip.txt\n\necho \"Done\"\nexit 0\n";
 		};
 		B5FE4B63109FD88600E1608F /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
